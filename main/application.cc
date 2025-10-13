@@ -11,6 +11,9 @@
 #include "settings.h"
 
 #include <cstring>
+#include <memory>
+#include <string_view>
+#include <stdexcept>
 #include <esp_log.h>
 #include <cJSON.h>
 #include <driver/gpio.h>
@@ -869,4 +872,138 @@ void Application::SetAecMode(AecMode mode) {
 
 void Application::PlaySound(const std::string_view& sound) {
     audio_service_.PlaySound(sound);
+}
+
+namespace {
+struct MusicPlaybackTaskContext {
+    Application* app;
+    std::string url;
+    uint32_t token;
+};
+constexpr size_t kMaxMusicDownloadSize = 4 * 1024 * 1024; // 4 MB guardrail
+} // namespace
+
+void Application::PlayMusicFromUrl(const std::string& url) {
+    Schedule([this, url]() {
+        auto display = Board::GetInstance().GetDisplay();
+        if (display) {
+            display->SetChatMessage("system", "Starting music playback…");
+        }
+
+        // Reset decoder to ensure a clean playback buffer.
+        audio_service_.ResetDecoder();
+
+        // Increment token so in-flight tasks can detect cancellation or supersession.
+        uint32_t token = music_playback_token_.fetch_add(1, std::memory_order_relaxed) + 1;
+
+        auto ctx = std::make_unique<MusicPlaybackTaskContext>();
+        ctx->app = this;
+        ctx->url = url;
+        ctx->token = token;
+
+        auto task_fn = [](void* param) {
+            std::unique_ptr<MusicPlaybackTaskContext> ctx(static_cast<MusicPlaybackTaskContext*>(param));
+            auto* app = ctx->app;
+            const uint32_t token = ctx->token;
+
+            auto notify_error = [app, token](const std::string& message) {
+                if (app->music_playback_token_.load(std::memory_order_relaxed) != token) {
+                    return;
+                }
+                app->Schedule([message]() {
+                    ESP_LOGE(TAG, "Music playback failed: %s", message.c_str());
+                    auto display = Board::GetInstance().GetDisplay();
+                    if (display) {
+                        display->SetChatMessage("system", message.c_str());
+                    }
+                });
+            };
+
+            try {
+                auto& board = Board::GetInstance();
+                auto network = board.GetNetwork();
+                if (network == nullptr) {
+                    throw std::runtime_error("Network interface unavailable");
+                }
+
+                auto http = network->CreateHttp(3);
+                if (!http || !http->Open("GET", ctx->url)) {
+                    throw std::runtime_error("Failed to open music URL");
+                }
+
+                int status_code = http->GetStatusCode();
+                if (status_code != 200) {
+                    http->Close();
+                    throw std::runtime_error("Unexpected HTTP status: " + std::to_string(status_code));
+                }
+
+                std::string audio_data;
+                size_t content_length = http->GetBodyLength();
+                if (content_length > 0 && content_length <= kMaxMusicDownloadSize) {
+                    audio_data.reserve(content_length);
+                }
+
+                char buffer[1024];
+                while (true) {
+                    int ret = http->Read(buffer, sizeof(buffer));
+                    if (ret < 0) {
+                        http->Close();
+                        throw std::runtime_error("Failed while downloading audio data");
+                    }
+                    if (ret == 0) {
+                        break;
+                    }
+                    audio_data.append(buffer, ret);
+                    if (audio_data.size() > kMaxMusicDownloadSize) {
+                        http->Close();
+                        throw std::runtime_error("Audio file is too large (limit 4MB)");
+                    }
+                }
+                http->Close();
+
+                if (app->music_playback_token_.load(std::memory_order_relaxed) != token) {
+                    // Another playback request superseded this one.
+                    return;
+                }
+
+                if (audio_data.size() < 4 || audio_data.compare(0, 4, "OggS") != 0) {
+                    throw std::runtime_error("Only Opus .ogg audio is supported");
+                }
+
+                app->audio_service_.PlaySound(std::string_view(audio_data.data(), audio_data.size()));
+
+                if (app->music_playback_token_.load(std::memory_order_relaxed) == token) {
+                    app->Schedule([]() {
+                        auto display = Board::GetInstance().GetDisplay();
+                        if (display) {
+                            display->SetChatMessage("system", "");
+                        }
+                    });
+                }
+            } catch (const std::exception& e) {
+                notify_error(e.what());
+            } catch (...) {
+                notify_error("Unknown error during music playback");
+            }
+        };
+
+        if (xTaskCreate(task_fn, "music_fetch", 8192, ctx.release(), 4, nullptr) != pdPASS) {
+            music_playback_token_.fetch_add(1, std::memory_order_relaxed);
+            ESP_LOGE(TAG, "Failed to create music fetch task");
+            if (display) {
+                display->SetChatMessage("system", "Unable to start music playback");
+            }
+        }
+    });
+}
+
+void Application::StopMusicPlayback() {
+    music_playback_token_.fetch_add(1, std::memory_order_relaxed);
+    Schedule([this]() {
+        audio_service_.ResetDecoder();
+        auto display = Board::GetInstance().GetDisplay();
+        if (display) {
+            display->SetChatMessage("system", "");
+        }
+    });
 }
