@@ -56,7 +56,7 @@ git submodule update --init --recursive
 **Bước 2: Cài đặt các công cụ**
 ```bash
 # Chạy script cài đặt
-./install.sh esp32s3
+./install.sh esp32c3
 
 # Thiết lập biến môi trường
 . ./export.sh
