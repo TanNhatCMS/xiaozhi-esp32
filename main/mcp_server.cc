@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstring>
 #include <esp_pthread.h>
+#include <string_view>
 
 #include "application.h"
 #include "display.h"
@@ -61,6 +62,21 @@ void McpServer::AddCommonTools() {
             auto codec = board.GetAudioCodec();
             codec->SetOutputVolume(properties["volume"].value<int>());
             return true;
+        });
+
+    AddTool("self.audio_speaker.play_music",
+        "Play an Opus/OGG audio file on the speaker. Provide an HTTP(S) URL that points directly to the audio file when the user requests music or a sound clip.",
+        PropertyList({
+            Property("url", kPropertyTypeString)
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto url = properties["url"].value<std::string>();
+            if (url.empty()) {
+                throw std::runtime_error("Missing url argument");
+            }
+            auto& app = Application::GetInstance();
+            app.PlayMusicFromUrl(url);
+            return std::string("Starting playback from ") + url;
         });
     
     auto backlight = board.GetBacklight();

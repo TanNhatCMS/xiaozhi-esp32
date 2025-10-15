@@ -10,6 +10,7 @@
 #include <mutex>
 #include <deque>
 #include <memory>
+#include <atomic>
 
 #include "protocol.h"
 #include "ota.h"
@@ -62,6 +63,8 @@ public:
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
     void PlaySound(const std::string_view& sound);
+    void PlayMusicFromUrl(const std::string& url);
+    void StopMusicPlayback();
     AudioService& GetAudioService() { return audio_service_; }
 
 private:
@@ -84,6 +87,7 @@ private:
     int clock_ticks_ = 0;
     TaskHandle_t check_new_version_task_handle_ = nullptr;
     TaskHandle_t main_event_loop_task_handle_ = nullptr;
+    std::atomic<uint32_t> music_playback_token_{0};
 
     void OnWakeWordDetected();
     void CheckNewVersion(Ota& ota);
