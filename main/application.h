@@ -66,6 +66,7 @@ public:
     void PlayMusicFromUrl(const std::string& url);
     void StopMusicPlayback();
     AudioService& GetAudioService() { return audio_service_; }
+    void RemoteWakeup(const std::string& reason);
 
 private:
     Application();
