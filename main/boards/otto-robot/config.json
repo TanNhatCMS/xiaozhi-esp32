@@ -4,8 +4,15 @@
         {
             "name": "otto-robot",
             "sdkconfig_append": [
-                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v1/16m.csv\"",
-                "CONFIG_LVGL_USE_GIF=y"
+                "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/16m.csv\"",
+                "CONFIG_LVGL_USE_GIF=y",
+                "CONFIG_SR_MN_EN_MULTINET6_QUANT=y",
+                "CONFIG_USE_CUSTOM_WAKE_WORD=y",
+                "CONFIG_CUSTOM_WAKE_WORD=\"Hello Mun\"",
+                "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"Hello Mun\"",
+                "CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20",
+                "# CONFIG_LANGUAGE_ZH_CN is not set",
+                "CONFIG_LANGUAGE_VI_VN=y"
             ]
         }
     ]

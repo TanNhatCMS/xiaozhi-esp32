@@ -270,8 +270,8 @@ void Otto::Walk(float steps, int period, int dir, int amount) {
     //--      -90 : Walk forward
     //--       90 : Walk backward
     //-- Feet servos also have the same offset (for tiptoe a little bit)
-    int A[SERVO_COUNT] = {30, 30, 30, 30, 0, 0};
-    int O[SERVO_COUNT] = {0, 0, 5, -5, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};
+    int A[SERVO_COUNT] = {30, 30, 15, 15, 0, 0};  // Giảm foot amplitude từ 30 xuống 15
+    int O[SERVO_COUNT] = {0, 0, -2, 2, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};  // Swap offset: LEFT_FOOT=-2, RIGHT_FOOT=+2
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(dir * -90), DEG2RAD(dir * -90), 0, 0};
 
     // 如果amount>0且有手部舵机，设置手部振幅和相位
@@ -306,8 +306,8 @@ void Otto::Turn(float steps, int period, int dir, int amount) {
     //-- When the right hip servo amplitude is higher, the steps taken by
     //--   the right leg are bigger than the left. So, the robot describes an
     //--   left arc
-    int A[SERVO_COUNT] = {30, 30, 30, 30, 0, 0};
-    int O[SERVO_COUNT] = {0, 0, 5, -5, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};
+    int A[SERVO_COUNT] = {30, 30, 15, 15, 0, 0};  // Giảm foot amplitude từ 30 xuống 15
+    int O[SERVO_COUNT] = {0, 0, -2, 2, HAND_HOME_POSITION - 90, HAND_HOME_POSITION};  // Swap offset: LEFT_FOOT=-2, RIGHT_FOOT=+2
     double phase_diff[SERVO_COUNT] = {0, 0, DEG2RAD(-90), DEG2RAD(-90), 0, 0};
 
     if (dir == LEFT) {
