@@ -465,6 +465,8 @@ choice DISPLAY_LCD_TYPE
         bool "ST7796 320*480 IPS"
     config LCD_ST7796_320X480_NO_IPS
         bool "ST7796 320*480, Non-IPS"
+    config LCD_ILI9488_320X480
+        bool "ILI9488 320*480"
     config LCD_ILI9341_240X320
         bool "ILI9341 240*320"
     config LCD_ILI9341_240X320_NO_IPS
