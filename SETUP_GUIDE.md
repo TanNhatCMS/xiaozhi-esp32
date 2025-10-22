@@ -56,7 +56,7 @@ git submodule update --init --recursive
 **Bước 2: Cài đặt các công cụ**
 ```bash
 # Chạy script cài đặt
-./install.sh esp32c3
+./install.sh all
 
 # Thiết lập biến môi trường
 . ./export.sh
@@ -83,7 +83,7 @@ source ~/.bashrc
 
 #### Bước 1: Thiết lập target
 ```bash
-cd /path/to/xiaozhi-esp32-vi
+cd /path/to/xiaozhi-esp32
 idf.py set-target esp32s3
 ```
 
