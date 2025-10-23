@@ -1,0 +1,7 @@
+# Mặc định: coi file text, chuẩn hóa và checkout bằng LF
+* text=auto eol=lf
+
+# Ngoại lệ cần CRLF (nếu bạn có script Windows)
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
