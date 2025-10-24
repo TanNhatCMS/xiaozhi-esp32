@@ -147,6 +147,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_ESP32_C3_MINI_KONAN
         bool "ESP32-C3 Mini Konan (MAX98357A + INMP441)"
         depends on IDF_TARGET_ESP32C3
+    config BOARD_TYPE_ESP32_S3_LCD_ILI9488
+        bool "ESP32-S3 LCD ILI9488"
+        depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_ESP32S3_KORVO2_V3
         bool "ESP32S3 KORVO2 V3"
         depends on IDF_TARGET_ESP32S3
@@ -500,8 +503,6 @@ choice DISPLAY_LCD_TYPE
         bool "ST7796 320*480 IPS"
     config LCD_ST7796_320X480_NO_IPS
         bool "ST7796 320*480, Non-IPS"
-    config LCD_ILI9488_320X480
-        bool "ILI9488 320*480"
     config LCD_ILI9341_240X320
         bool "ILI9341 240*320"
     config LCD_ILI9341_240X320_NO_IPS
