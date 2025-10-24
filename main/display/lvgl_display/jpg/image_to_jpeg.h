@@ -6,9 +6,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <linux/videodev2.h>
 
-// Define v4l2_pix_fmt_t without linux/videodev2.h dependency
-typedef uint32_t v4l2_pix_fmt_t;
+typedef uint32_t v4l2_pix_fmt_t; // see linux/videodev2.h for details
 
 #ifdef __cplusplus
 extern "C" {
