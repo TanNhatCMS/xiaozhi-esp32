@@ -10,6 +10,7 @@
 #include <mutex>
 #include <deque>
 #include <memory>
+#include <vector>
 #include <atomic>
 
 #include "protocol.h"
@@ -62,10 +63,14 @@ public:
     void SendMcpMessage(const std::string& payload);
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
+
+    // Thêm: nhận dữ liệu âm thanh từ bên ngoài (ví dụ phát nhạc)
+    void AddAudioData(AudioStreamPacket&& packet);
     void PlaySound(const std::string_view& sound);
     void PlayMusicFromUrl(const std::string& url);
     void StopMusicPlayback();
     AudioService& GetAudioService() { return audio_service_; }
+
     void RemoteWakeup(const std::string& reason);
 
 private:
