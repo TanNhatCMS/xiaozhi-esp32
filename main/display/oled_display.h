@@ -33,6 +33,7 @@ public:
 
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void SetEmotion(const char* emotion) override;
+    virtual void SetMusicInfo(const char* song_name) override;
     virtual void SetTheme(Theme* theme) override;
 };
 

@@ -349,6 +349,24 @@ void OledDisplay::SetEmotion(const char* emotion) {
         lv_label_set_text(emotion_label_, FONT_AWESOME_NEUTRAL);
     }
 }
+void OledDisplay::SetMusicInfo(const char* song_name) {
+    // "Hành vi mặc định: với các chế độ không phải WeChat, hiển thị tên bài hát trên nhãn của tin nhắn chat."
+    DisplayLockGuard lock(this);
+    if (chat_message_label_ == nullptr) {
+        return;
+    }
+    if (song_name != nullptr && strlen(song_name) > 0) {
+        std::string music_text = "";
+        music_text += song_name;
+        lv_label_set_text(chat_message_label_, music_text.c_str());
+                // Hiện emoji, ẩn preview nếu có
+        if (emotion_label_ != nullptr) {
+            lv_obj_clear_flag(emotion_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+    } else {
+        lv_label_set_text(chat_message_label_, "");
+    }
+}
 
 void OledDisplay::SetTheme(Theme* theme) {
     DisplayLockGuard lock(this);
