@@ -28,6 +28,7 @@
 // Display configuration (ILI9488 SPI)
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_42
 #define DISPLAY_MOSI_PIN      GPIO_NUM_47
+#define DISPLAY_MISO_PIN      GPIO_NUM_13
 #define DISPLAY_CLK_PIN       GPIO_NUM_21
 #define DISPLAY_DC_PIN        GPIO_NUM_40
 #define DISPLAY_RST_PIN       GPIO_NUM_45

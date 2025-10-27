@@ -55,7 +55,7 @@ private:
     void InitializeSpi()
     {
         ESP_LOGI(TAG, "Initializing SPI bus (MOSI:%d, MISO:%d, CLK:%d)",
-                 SPI_MOSI, SPI_MISO, SPI_CLOCK);
+                 DISPLAY_MOSI_PIN, DISPLAY_MISO_PIN, DISPLAY_CLK_PIN);
         spi_bus_config_t buscfg = {};
         buscfg.mosi_io_num = DISPLAY_MOSI_PIN;
         buscfg.miso_io_num = DISPLAY_MISO_PIN;
