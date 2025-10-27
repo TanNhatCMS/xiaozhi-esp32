@@ -12,6 +12,8 @@
 #include "codecs/max98357a_inmp441_codec.h"
 #include "button.h"
 #include "config.h"
+#include "power_save_timer.h"
+#include "press_to_talk_mcp_tool.h"
 #include "display/lcd_display.h"
 #include "lamp_controller.h"
 #include "led/single_led.h"
