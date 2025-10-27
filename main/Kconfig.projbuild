@@ -149,6 +149,8 @@ choice BOARD_TYPE
         depends on IDF_TARGET_ESP32C3
     config BOARD_TYPE_ESP32_S3_LCD_ILI9488
         bool "ESP32-S3 LCD ILI9488"
+        select LV_USE_GIF
+        select LV_GIF_CACHE_DECODE_DATA
         depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_ESP32S3_KORVO2_V3
         bool "ESP32S3 KORVO2 V3"
