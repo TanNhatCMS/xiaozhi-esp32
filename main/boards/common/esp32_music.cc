@@ -23,6 +23,53 @@
 
 #define TAG "Esp32Music"
 
+// ========== Bảng chữ cái tiếng Việt và chuyển đổi ==========
+
+/**
+ * @brief Kiểm tra xem chuỗi có chứa ký tự tiếng Việt không
+ */
+static bool ContainsVietnamese(const std::string &text)
+{
+    const std::vector<std::string> vietnamese_chars = {
+        "á", "à", "ả", "ã", "ạ", "ă", "ắ", "ằ", "ẳ", "ẵ", "ặ",
+        "â", "ấ", "ầ", "ẩ", "ẫ", "ậ", "đ", "é", "è", "ẻ", "ẽ", "ẹ",
+        "ê", "ế", "ề", "ể", "ễ", "ệ", "í", "ì", "ỉ", "ĩ", "ị",
+        "ó", "ò", "ỏ", "õ", "ọ", "ô", "ố", "ồ", "ổ", "ỗ", "ộ",
+        "ơ", "ớ", "ờ", "ở", "ỡ", "ợ", "ú", "ù", "ủ", "ũ", "ụ",
+        "ư", "ứ", "ừ", "ử", "ữ", "ự", "ý", "ỳ", "ỷ", "ỹ", "ỵ"};
+
+    for (const auto &vn_char : vietnamese_chars)
+    {
+        if (text.find(vn_char) != std::string::npos)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Phát hiện ngôn ngữ
+ */
+static std::string DetectLanguage(const std::string &text)
+{
+    if (ContainsVietnamese(text))
+    {
+        return "vietnamese";
+    }
+
+    for (size_t i = 0; i < text.length(); i++)
+    {
+        unsigned char c = text[i];
+        if (c >= 0xE4 && c <= 0xE9)
+        {
+            return "chinese";
+        }
+    }
+
+    return "unknown";
+}
+
 // ========== Các hàm xác thực ESP32 đơn giản ==========
 
 /**
@@ -104,7 +151,7 @@ static void add_auth_headers(Http *http)
         http->SetHeader("X-Timestamp", std::to_string(timestamp));
         http->SetHeader("X-Dynamic-Key", dynamic_key);
 
-        ESP_LOGI(TAG, "Added auth headers - MAC: %s, ChipID: %s, Timestamp: %lld",
+        ESP_LOGI(TAG, "Đã thêm header xác thực - MAC: %s, ChipID: %s, Timestamp: %lld",
                  mac.c_str(), chip_id.c_str(), timestamp);
     }
 }
@@ -191,13 +238,13 @@ Esp32Music::Esp32Music() : last_downloaded_data_(), current_music_url_(), curren
                            buffer_cv_(), buffer_size_(0), mp3_decoder_(nullptr), mp3_frame_info_(),
                            mp3_decoder_initialized_(false)
 {
-    ESP_LOGI(TAG, "Music player initialized with default spectrum display mode");
+    ESP_LOGI(TAG, "Trình phát nhạc Xiaozhi - Đã khởi tạo hỗ trợ tiếng Việt");
     InitializeMp3Decoder();
 }
 
 Esp32Music::~Esp32Music()
 {
-    ESP_LOGI(TAG, "Destroying music player - stopping all operations");
+    ESP_LOGI(TAG, "Đang hủy trình phát nhạc - dừng tất cả hoạt động");
 
     // Dừng tất cả các hoạt động
     is_downloading_ = false;
@@ -213,7 +260,7 @@ Esp32Music::~Esp32Music()
     // Chờ thread tải xuống kết thúc, đặt timeout 5 giây
     if (download_thread_.joinable())
     {
-        ESP_LOGI(TAG, "Waiting for download thread to finish (timeout: 5s)");
+        ESP_LOGI(TAG, "Đang chờ thread tải xuống kết thúc (hết giờ: 5 giây)");
         auto start_time = std::chrono::steady_clock::now();
 
         // Chờ thread kết thúc
@@ -227,7 +274,7 @@ Esp32Music::~Esp32Music()
 
             if (elapsed >= 5)
             {
-                ESP_LOGW(TAG, "Download thread join timeout after 5 seconds");
+                ESP_LOGW(TAG, "Hết thời gian chờ join thread tải xuống sau 5 giây");
                 break;
             }
 
@@ -249,7 +296,7 @@ Esp32Music::~Esp32Music()
             // In thông tin chờ định kỳ
             if (elapsed > 0 && elapsed % 1 == 0)
             {
-                ESP_LOGI(TAG, "Still waiting for download thread to finish... (%ds)", (int)elapsed);
+                ESP_LOGI(TAG, "Vẫn đang chờ thread tải xuống kết thúc... (%d giây)", (int)elapsed);
             }
         }
 
@@ -257,13 +304,13 @@ Esp32Music::~Esp32Music()
         {
             download_thread_.join();
         }
-        ESP_LOGI(TAG, "Download thread finished");
+        ESP_LOGI(TAG, "Thread tải xuống đã kết thúc");
     }
 
     // Chờ thread phát nhạc kết thúc, đặt timeout 3 giây
     if (play_thread_.joinable())
     {
-        ESP_LOGI(TAG, "Waiting for playback thread to finish (timeout: 3s)");
+        ESP_LOGI(TAG, "Đang chờ thread phát nhạc kết thúc (hết giờ: 3 giây)");
         auto start_time = std::chrono::steady_clock::now();
 
         bool thread_finished = false;
@@ -276,7 +323,7 @@ Esp32Music::~Esp32Music()
 
             if (elapsed >= 3)
             {
-                ESP_LOGW(TAG, "Playback thread join timeout after 3 seconds");
+                ESP_LOGW(TAG, "Hết thời gian chờ join thread phát nhạc sau 3 giây");
                 break;
             }
 
@@ -300,27 +347,173 @@ Esp32Music::~Esp32Music()
         {
             play_thread_.join();
         }
-        ESP_LOGI(TAG, "Playback thread finished");
+        ESP_LOGI(TAG, "Thread phát nhạc đã kết thúc");
     }
 
     // Chờ thread lời bài hát kết thúc
     if (lyric_thread_.joinable())
     {
-        ESP_LOGI(TAG, "Waiting for lyric thread to finish");
+        ESP_LOGI(TAG, "Đang chờ thread lời bài hát kết thúc");
         lyric_thread_.join();
-        ESP_LOGI(TAG, "Lyric thread finished");
+        ESP_LOGI(TAG, "Thread lời bài hát đã kết thúc");
     }
 
     // Dọn dẹp bộ đệm và bộ giải mã MP3
     ClearAudioBuffer();
     CleanupMp3Decoder();
 
-    ESP_LOGI(TAG, "Music player destroyed successfully");
+    ESP_LOGI(TAG, "Trình phát nhạc đã được hủy thành công");
+}
+// Mới thêm vào
+void Esp32Music::ForceCleanupCache()
+{
+    ESP_LOGI(TAG, "=== BẮT ĐẦU DỌN DẸP CACHE BẮT BUỘC ===");
+
+    // 1. Dừng tất cả các luồng
+    is_downloading_ = false;
+    is_playing_ = false;
+    is_lyric_running_ = false;
+
+    // 2. Thông báo để các luồng thoát nhanh
+    {
+        std::lock_guard<std::mutex> lock(buffer_mutex_);
+        buffer_cv_.notify_all();
+    }
+
+    // 3. Đợi luồng tải xuống
+    if (download_thread_.joinable())
+    {
+        ESP_LOGI(TAG, "Đang chờ luồng tải xuống...");
+        auto start = std::chrono::steady_clock::now();
+
+        while (download_thread_.joinable())
+        {
+            vTaskDelay(pdMS_TO_TICKS(50));
+
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                               std::chrono::steady_clock::now() - start)
+                               .count();
+
+            if (elapsed >= 3)
+            {
+                ESP_LOGW(TAG, "Hết thời gian chờ luồng tải xuống, tách luồng");
+                download_thread_.detach();
+                break;
+            }
+        }
+
+        if (download_thread_.joinable())
+        {
+            download_thread_.join();
+        }
+        ESP_LOGI(TAG, "Luồng tải xuống đã dừng");
+    }
+
+    // 4. Đợi luồng phát lại
+    if (play_thread_.joinable())
+    {
+        ESP_LOGI(TAG, "Đang chờ luồng phát lại...");
+        auto start = std::chrono::steady_clock::now();
+
+        while (play_thread_.joinable())
+        {
+            vTaskDelay(pdMS_TO_TICKS(50));
+
+            auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+                               std::chrono::steady_clock::now() - start)
+                               .count();
+
+            if (elapsed >= 3)
+            {
+                ESP_LOGW(TAG, "Hết thời gian chờ luồng phát lại, tách luồng");
+                play_thread_.detach();
+                break;
+            }
+        }
+
+        if (play_thread_.joinable())
+        {
+            play_thread_.join();
+        }
+        ESP_LOGI(TAG, "Luồng phát lại đã dừng");
+    }
+
+    // 5. Đợi luồng lời bài hát
+    if (lyric_thread_.joinable())
+    {
+        ESP_LOGI(TAG, "Đang chờ luồng lời bài hát...");
+        lyric_thread_.join();
+        ESP_LOGI(TAG, "Luồng lời bài hát đã dừng");
+    }
+
+    // 6. Xóa bộ đệm âm thanh
+    ClearAudioBuffer();
+    ESP_LOGI(TAG, "Bộ đệm âm thanh đã được xóa");
+
+    // 7. Giải phóng dữ liệu FFT
+    if (final_pcm_data_fft != nullptr)
+    {
+        heap_caps_free(final_pcm_data_fft);
+        final_pcm_data_fft = nullptr;
+        ESP_LOGI(TAG, "Dữ liệu FFT đã được giải phóng");
+    }
+
+    // 8. Đặt lại bộ giải mã MP3
+    CleanupMp3Decoder();
+    InitializeMp3Decoder();
+    ESP_LOGI(TAG, "Bộ giải mã MP3 đã được đặt lại");
+
+    // 9. Xóa bộ đệm lời bài hát
+    {
+        std::lock_guard<std::mutex> lock(lyrics_mutex_);
+        lyrics_.clear();
+        lyrics_.shrink_to_fit();
+    }
+    ESP_LOGI(TAG, "Lời bài hát đã được xóa");
+
+    // 10. Đặt lại tất cả các biến trạng thái
+    current_music_url_.clear();
+    current_lyric_url_.clear();
+    last_downloaded_data_.clear();
+    current_play_time_ms_ = 0;
+    last_frame_time_ms_ = 0;
+    total_frames_decoded_ = 0;
+    current_lyric_index_ = -1;
+    song_name_displayed_ = false;
+
+    // 11. Đặt lại tần số lấy mẫu
+    ResetSampleRate();
+
+    // 12. Dừng hiển thị nếu có
+    auto &board = Board::GetInstance();
+    auto display = board.GetDisplay();
+    if (display)
+    {
+        if (display_mode_ == DISPLAY_MODE_SPECTRUM)
+        {
+            display->stopFft();
+        }
+        display->SetMusicInfo("");
+    }
+
+    // 13. Chờ một chút để hệ thống ổn định
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    ESP_LOGI(TAG, "=== DỌN DẸP CACHE HOÀN TẤT ===");
+    ESP_LOGI(TAG, "Heap trống: %d bytes", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "SPIRAM trống: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    ESP_logI(TAG, "Heap trống tối thiểu: %d bytes", esp_get_minimum_free_heap_size());
 }
 
 bool Esp32Music::Download(const std::string &song_name, const std::string &artist_name)
 {
-    ESP_LOGI(TAG, "Starting to get music details for: %s", song_name.c_str());
+    ESP_LOGI(TAG, "=== YÊU CẦU BÀI HÁT MỚI: Dọn dẹp bộ đệm cũ trước tiên ==="); // mới thêm
+    ForceCleanupCache();                                                    // mới thêm
+    ESP_LOGI(TAG, "Nhạc mã nguồn mở Xiaozhi - Hỗ trợ tiếng Việt");
+    ESP_LOGI(TAG, "Bắt đầu lấy thông tin chi tiết nhạc cho: %s", song_name.c_str());
+
+    std::string detected_lang = DetectLanguage(song_name);
+    ESP_LOGI(TAG, "Ngôn ngữ được phát hiện: %s", detected_lang.c_str());
 
     // Xóa dữ liệu tải xuống trước đó
     last_downloaded_data_.clear();
@@ -330,9 +523,17 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
 
     // Bước 1: Gọi API stream_pcm để lấy thông tin âm thanh
     std::string base_url = "http://www.xiaozhishop.xyz:5005";
-    std::string full_url = base_url + "/stream_pcm?song=" + url_encode(song_name) + "&artist=" + url_encode(artist_name);
+    std::string query_params = "song=" + url_encode(song_name) + "&artist=" + url_encode(artist_name);
 
-    ESP_LOGI(TAG, "Request URL: %s", full_url.c_str());
+    if (detected_lang == "vietnamese")
+    {
+        query_params += "&prefer_language=vietnamese&language_priority=vi,zh";
+        ESP_LOGI(TAG, "Phát hiện tiếng Việt - ưu tiên nhạc Việt");
+    }
+
+    std::string full_url = base_url + "/stream_pcm?" + query_params;
+
+    ESP_LOGI(TAG, "URL yêu cầu: %s", full_url.c_str());
 
     // Sử dụng HTTP client do Board cung cấp
     auto network = Board::GetInstance().GetNetwork();
@@ -341,6 +542,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
     // Đặt header cơ bản cho request
     http->SetHeader("User-Agent", "ESP32-Music-Player/1.0");
     http->SetHeader("Accept", "application/json");
+    http->SetHeader("Accept-Language", "vi-VN,vi;q=0.9,en;q=0.8");
 
     // Thêm header xác thực ESP32
     add_auth_headers(http.get());
@@ -348,7 +550,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
     // Mở kết nối GET
     if (!http->Open("GET", full_url))
     {
-        ESP_LOGE(TAG, "Failed to connect to music API");
+        ESP_LOGE(TAG, "Không thể kết nối đến API nhạc");
         return false;
     }
 
@@ -356,7 +558,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
     int status_code = http->GetStatusCode();
     if (status_code != 200)
     {
-        ESP_LOGE(TAG, "HTTP GET failed with status code: %d", status_code);
+        ESP_LOGE(TAG, "HTTP GET thất bại với mã trạng thái: %d", status_code);
         http->Close();
         return false;
     }
@@ -365,13 +567,13 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
     last_downloaded_data_ = http->ReadAll();
     http->Close();
 
-    ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d", status_code, last_downloaded_data_.length());
-    ESP_LOGD(TAG, "Complete music details response: %s", last_downloaded_data_.c_str());
+    ESP_LOGI(TAG, "Trạng thái HTTP GET = %d, độ dài nội dung = %d", status_code, last_downloaded_data_.length());
+    ESP_LOGD(TAG, "Phản hồi chi tiết nhạc đầy đủ: %s", last_downloaded_data_.c_str());
 
     // Kiểm tra phản hồi xác thực đơn giản (tùy chọn)
     if (last_downloaded_data_.find("ESP32动态密钥验证失败") != std::string::npos)
     {
-        ESP_LOGE(TAG, "Authentication failed for song: %s", song_name.c_str());
+        ESP_LOGE(TAG, "Xác thực thất bại cho bài hát: %s", song_name.c_str());
         return false;
     }
 
@@ -386,20 +588,32 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
             cJSON *title = cJSON_GetObjectItem(response_json, "title");
             cJSON *audio_url = cJSON_GetObjectItem(response_json, "audio_url");
             cJSON *lyric_url = cJSON_GetObjectItem(response_json, "lyric_url");
+            cJSON *language = cJSON_GetObjectItem(response_json, "language");
+
+            if (cJSON_IsString(language))
+            {
+                ESP_LOGI(TAG, "Ngôn ngữ bài hát: %s", language->valuestring);
+
+                if (detected_lang == "vietnamese" &&
+                    strcmp(language->valuestring, "chinese") == 0)
+                {
+                    ESP_LOGW(TAG, "Cảnh báo: Yêu cầu tiếng Việt nhưng nhận được tiếng Trung");
+                }
+            }
 
             if (cJSON_IsString(artist))
             {
-                ESP_LOGI(TAG, "Artist: %s", artist->valuestring);
+                ESP_LOGI(TAG, "Nghệ sĩ: %s", artist->valuestring);
             }
             if (cJSON_IsString(title))
             {
-                ESP_LOGI(TAG, "Title: %s", title->valuestring);
+                ESP_LOGI(TAG, "Tiêu đề: %s", title->valuestring);
             }
 
             // Kiểm tra xem audio_url có hợp lệ không
             if (cJSON_IsString(audio_url) && audio_url->valuestring && strlen(audio_url->valuestring) > 0)
             {
-                ESP_LOGI(TAG, "Audio URL path: %s", audio_url->valuestring);
+                ESP_LOGI(TAG, "Đường dẫn URL âm thanh: %s", audio_url->valuestring);
 
                 // Bước 2: Ghép URL tải xuống âm thanh hoàn chỉnh, đảm bảo mã hóa URL cho audio_url
                 std::string audio_path = audio_url->valuestring;
@@ -418,7 +632,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
                     current_music_url_ = base_url + audio_path;
                 }
 
-                ESP_LOGI(TAG, "Starting streaming playback for: %s", song_name.c_str());
+                ESP_LOGI(TAG, "Bắt đầu phát streaming cho: %s", song_name.c_str());
                 song_name_displayed_ = false; // Đặt lại cờ hiển thị tên bài hát
                 StartStreaming(current_music_url_);
 
@@ -443,7 +657,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
                     // Quyết định có khởi động lời bài hát hay không dựa trên chế độ hiển thị
                     if (display_mode_ == DISPLAY_MODE_LYRICS)
                     {
-                        ESP_LOGI(TAG, "Loading lyrics for: %s (lyrics display mode)", song_name.c_str());
+                        ESP_LOGI(TAG, "Đang tải lời bài hát cho: %s (chế độ hiển thị lời)", song_name.c_str());
 
                         // Khởi động tải xuống và hiển thị lời bài hát
                         if (is_lyric_running_)
@@ -463,7 +677,7 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
                     }
                     else
                     {
-                        ESP_LOGI(TAG, "Lyric URL found but spectrum display mode is active, skipping lyrics");
+                        ESP_LOGI(TAG, "Tìm thấy URL lời bài hát nhưng chế độ hiển thị phổ đang hoạt động, bỏ qua lời bài hát");
                     }
                 }
                 else
@@ -477,20 +691,19 @@ bool Esp32Music::Download(const std::string &song_name, const std::string &artis
             else
             {
                 // audio_url rỗng hoặc không hợp lệ
-                ESP_LOGE(TAG, "Audio URL not found or empty for song: %s", song_name.c_str());
-                ESP_LOGE(TAG, "Failed to find music: Không tìm thấy bài hát '%s'", song_name.c_str());
+                ESP_LOGE(TAG, "Không thể tìm thấy nhạc: Không tìm thấy bài hát '%s'", song_name.c_str());
                 cJSON_Delete(response_json);
                 return false;
             }
         }
         else
         {
-            ESP_LOGE(TAG, "Failed to parse JSON response");
+            ESP_LOGE(TAG, "Không thể phân tích phản hồi JSON");
         }
     }
     else
     {
-        ESP_LOGE(TAG, "Empty response from music API");
+        ESP_LOGE(TAG, "Phản hồi trống từ API nhạc");
     }
 
     return false;
@@ -506,11 +719,11 @@ bool Esp32Music::StartStreaming(const std::string &music_url)
 {
     if (music_url.empty())
     {
-        ESP_LOGE(TAG, "Music URL is empty");
+        ESP_LOGE(TAG, "URL nhạc trống");
         return false;
     }
 
-    ESP_LOGD(TAG, "Starting streaming for URL: %s", music_url.c_str());
+    ESP_LOGD(TAG, "Bắt đầu streaming cho URL: %s", music_url.c_str());
 
     // Dừng việc phát và tải xuống trước đó
     is_downloading_ = false;
@@ -539,8 +752,8 @@ bool Esp32Music::StartStreaming(const std::string &music_url)
 
     // Cấu hình kích thước stack thread để tránh stack overflow
     esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
-    cfg.stack_size = 8192; // Kích thước stack 8KB
-    cfg.prio = 5;          // Ưu tiên trung bình
+    cfg.stack_size = 12288; // Kích thước stack 12KB
+    cfg.prio = 5;           // Ưu tiên trung bình
     cfg.thread_name = "audio_stream";
     esp_pthread_set_cfg(&cfg);
 
@@ -552,7 +765,7 @@ bool Esp32Music::StartStreaming(const std::string &music_url)
     is_playing_ = true;
     play_thread_ = std::thread(&Esp32Music::PlayAudioStream, this);
 
-    ESP_LOGI(TAG, "Streaming threads started successfully");
+    ESP_LOGI(TAG, "Các luồng streaming đã khởi động thành công");
 
     return true;
 }
@@ -560,7 +773,7 @@ bool Esp32Music::StartStreaming(const std::string &music_url)
 // Dừng phát streaming
 bool Esp32Music::StopStreaming()
 {
-    ESP_LOGI(TAG, "Stopping music streaming - current state: downloading=%d, playing=%d",
+    ESP_LOGI(TAG, "Đang dừng streaming nhạc - trạng thái hiện tại: downloading=%d, playing=%d",
              is_downloading_.load(), is_playing_.load());
 
     // Đặt lại tần số lấy mẫu về giá trị gốc
@@ -569,7 +782,7 @@ bool Esp32Music::StopStreaming()
     // Kiểm tra xem có streaming đang chạy không
     if (!is_playing_ && !is_downloading_)
     {
-        ESP_LOGW(TAG, "No streaming in progress");
+        ESP_LOGW(TAG, "Không có streaming nào đang tiến hành");
         return true;
     }
 
@@ -583,7 +796,7 @@ bool Esp32Music::StopStreaming()
     if (display)
     {
         display->SetMusicInfo(""); // Xóa hiển thị tên bài hát
-        ESP_LOGI(TAG, "Cleared song name display");
+        ESP_LOGI(TAG, "Đã xóa hiển thị tên bài hát");
     }
 
     // Thông báo tất cả các thread đang chờ
@@ -596,7 +809,7 @@ bool Esp32Music::StopStreaming()
     if (download_thread_.joinable())
     {
         download_thread_.join();
-        ESP_LOGI(TAG, "Download thread joined in StopStreaming");
+        ESP_LOGI(TAG, "Luồng tải xuống đã được join trong StopStreaming");
     }
 
     // Chờ thread phát nhạc kết thúc, sử dụng cách an toàn hơn
@@ -633,13 +846,13 @@ bool Esp32Music::StopStreaming()
         {
             if (wait_count >= max_wait)
             {
-                ESP_LOGW(TAG, "Play thread join timeout, detaching thread");
+                ESP_LOGW(TAG, "Hết thời gian chờ join luồng phát, đang tách luồng");
                 play_thread_.detach();
             }
             else
             {
                 play_thread_.join();
-                ESP_LOGI(TAG, "Play thread joined in StopStreaming");
+                ESP_LOGI(TAG, "Luồng phát đã được join trong StopStreaming");
             }
         }
     }
@@ -648,26 +861,26 @@ bool Esp32Music::StopStreaming()
     if (display && display_mode_ == DISPLAY_MODE_SPECTRUM)
     {
         display->stopFft();
-        ESP_LOGI(TAG, "Stopped FFT display in StopStreaming (spectrum mode)");
+        ESP_LOGI(TAG, "Đã dừng hiển thị FFT trong StopStreaming (chế độ phổ)");
     }
     else if (display)
     {
-        ESP_LOGI(TAG, "Not in spectrum mode, skipping FFT stop in StopStreaming");
+        ESP_LOGI(TAG, "Không ở chế độ phổ, bỏ qua dừng FFT trong StopStreaming");
     }
 
-    ESP_LOGI(TAG, "Music streaming stop signal sent");
+    ESP_LOGI(TAG, "Đã gửi tín hiệu dừng streaming nhạc");
     return true;
 }
 
 // Tải xuống dữ liệu âm thanh streaming
 void Esp32Music::DownloadAudioStream(const std::string &music_url)
 {
-    ESP_LOGD(TAG, "Starting audio stream download from: %s", music_url.c_str());
+    ESP_LOGD(TAG, "Bắt đầu tải xuống luồng âm thanh từ: %s", music_url.c_str());
 
     // Xác thực tính hợp lệ của URL
     if (music_url.empty() || music_url.find("http") != 0)
     {
-        ESP_LOGE(TAG, "Invalid URL format: %s", music_url.c_str());
+        ESP_LOGE(TAG, "Định dạng URL không hợp lệ: %s", music_url.c_str());
         is_downloading_ = false;
         return;
     }
@@ -678,14 +891,16 @@ void Esp32Music::DownloadAudioStream(const std::string &music_url)
     // Đặt header cơ bản cho request
     http->SetHeader("User-Agent", "ESP32-Music-Player/1.0");
     http->SetHeader("Accept", "*/*");
-    http->SetHeader("Range", "bytes=0-"); // Hỗ trợ resumable download
+    http->SetHeader("Range", "bytes=0-");         // Hỗ trợ resumable download
+    http->SetHeader("Connection", "keep-alive");  // Giữ kết nối ổn định
+    http->SetHeader("Cache-Control", "no-cache"); // Tránh cache cũ
 
     // Thêm header xác thực ESP32
     add_auth_headers(http.get());
 
     if (!http->Open("GET", music_url))
     {
-        ESP_LOGE(TAG, "Failed to connect to music stream URL");
+        ESP_LOGE(TAG, "Không thể kết nối đến URL luồng nhạc");
         is_downloading_ = false;
         return;
     }
@@ -693,40 +908,57 @@ void Esp32Music::DownloadAudioStream(const std::string &music_url)
     int status_code = http->GetStatusCode();
     if (status_code != 200 && status_code != 206)
     { // 206 cho nội dung một phần
-        ESP_LOGE(TAG, "HTTP GET failed with status code: %d", status_code);
+        ESP_LOGE(TAG, "HTTP GET thất bại với mã trạng thái: %d", status_code);
         http->Close();
         is_downloading_ = false;
         return;
     }
 
-    ESP_LOGI(TAG, "Started downloading audio stream, status: %d", status_code);
+    ESP_LOGI(TAG, "Đã bắt đầu tải xuống luồng âm thanh, trạng thái: %d", status_code);
 
     // Đọc dữ liệu âm thanh theo khối
-    const size_t chunk_size = 4096; // 4KB mỗi khối
+    // Giảm chunk size để tránh mất gói tin
+    const size_t chunk_size = 1024; // Giảm từ 4096 xuống 1024
     char buffer[chunk_size];
     size_t total_downloaded = 0;
+    int consecutive_errors = 0;
+    const int max_consecutive_errors = 5;
 
     while (is_downloading_ && is_playing_)
     {
         int bytes_read = http->Read(buffer, chunk_size);
+
         if (bytes_read < 0)
         {
-            ESP_LOGE(TAG, "Failed to read audio data: error code %d", bytes_read);
-            break;
+            consecutive_errors++;
+            ESP_LOGW(TAG, "Read error: %d (consecutive: %d/%d)",
+                     bytes_read, consecutive_errors, max_consecutive_errors);
+
+            if (consecutive_errors >= max_consecutive_errors)
+            {
+                ESP_LOGE(TAG, "Too many consecutive errors, stopping download");
+                break;
+            }
+
+            // Chờ một chút trước khi thử lại
+            vTaskDelay(pdMS_TO_TICKS(200));
+            continue;
         }
         if (bytes_read == 0)
         {
-            ESP_LOGI(TAG, "Audio stream download completed, total: %d bytes", total_downloaded);
+            ESP_LOGI(TAG, "Tải xuống luồng âm thanh hoàn tất, tổng cộng: %d bytes", total_downloaded);
             break;
         }
 
-        // 打印数据块信息
-        // ESP_LOGI(TAG, "Downloaded chunk: %d bytes at offset %d", bytes_read, total_downloaded);
+        // Reset error counter khi đọc thành công
+        consecutive_errors = 0;
+        // In thông tin khối dữ liệu
+        // ESP_LOGI(TAG, "Đã tải xuống chunk: %d byte tại offset %d", bytes_read, total_downloaded);
 
-        // 安全地打印数据块的十六进制内容（前16字节）
+        // In an toàn nội dung hex của khối dữ liệu (16 byte đầu tiên)
         if (bytes_read >= 16)
         {
-            // ESP_LOGI(TAG, "Data: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X ...",
+            // ESP_LOGI(TAG, "Dữ liệu: %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X ...",
             //         (unsigned char)buffer[0], (unsigned char)buffer[1], (unsigned char)buffer[2], (unsigned char)buffer[3],
             //         (unsigned char)buffer[4], (unsigned char)buffer[5], (unsigned char)buffer[6], (unsigned char)buffer[7],
             //         (unsigned char)buffer[8], (unsigned char)buffer[9], (unsigned char)buffer[10], (unsigned char)buffer[11],
@@ -734,54 +966,64 @@ void Esp32Music::DownloadAudioStream(const std::string &music_url)
         }
         else
         {
-            ESP_LOGI(TAG, "Data chunk too small: %d bytes", bytes_read);
+            ESP_LOGI(TAG, "Khối dữ liệu quá nhỏ: %d byte", bytes_read);
         }
 
-        // 尝试检测文件格式（检查文件头）
+        // Thử phát hiện định dạng tệp (kiểm tra phần đầu tệp)
         if (total_downloaded == 0 && bytes_read >= 4)
         {
             if (memcmp(buffer, "ID3", 3) == 0)
             {
-                ESP_LOGI(TAG, "Detected MP3 file with ID3 tag");
+                ESP_LOGI(TAG, "Phát hiện file MP3 với thẻ ID3");
             }
             else if (buffer[0] == 0xFF && (buffer[1] & 0xE0) == 0xE0)
             {
-                ESP_LOGI(TAG, "Detected MP3 file header");
+                ESP_LOGI(TAG, "Phát hiện header file MP3");
             }
             else if (memcmp(buffer, "RIFF", 4) == 0)
             {
-                ESP_LOGI(TAG, "Detected WAV file");
+                ESP_LOGI(TAG, "Phát hiện file WAV");
             }
             else if (memcmp(buffer, "fLaC", 4) == 0)
             {
-                ESP_LOGI(TAG, "Detected FLAC file");
+                ESP_LOGI(TAG, "Phát hiện file FLAC");
             }
             else if (memcmp(buffer, "OggS", 4) == 0)
             {
-                ESP_LOGI(TAG, "Detected OGG file");
+                ESP_LOGI(TAG, "Phát hiện file OGG");
             }
             else
             {
-                ESP_LOGI(TAG, "Unknown audio format, first 4 bytes: %02X %02X %02X %02X",
+                ESP_LOGI(TAG, "Định dạng âm thanh không xác định, 4 byte đầu: %02X %02X %02X %02X",
                          (unsigned char)buffer[0], (unsigned char)buffer[1],
                          (unsigned char)buffer[2], (unsigned char)buffer[3]);
             }
         }
 
-        // 创建音频数据块
+        // Tạo khối dữ liệu âm thanh
         uint8_t *chunk_data = (uint8_t *)heap_caps_malloc(bytes_read, MALLOC_CAP_SPIRAM);
         if (!chunk_data)
         {
-            ESP_LOGE(TAG, "Failed to allocate memory for audio chunk");
+            ESP_LOGE(TAG, "Không thể cấp phát bộ nhớ cho chunk âm thanh");
             break;
         }
         memcpy(chunk_data, buffer, bytes_read);
 
-        // 等待缓冲区有空间
+        // Chờ bộ đệm có dung lượng trống
         {
             std::unique_lock<std::mutex> lock(buffer_mutex_);
-            buffer_cv_.wait(lock, [this]
-                            { return buffer_size_ < MAX_BUFFER_SIZE || !is_downloading_; });
+
+            // Tăng thời gian timeout để tránh mất gói
+            auto wait_result = buffer_cv_.wait_for(lock, std::chrono::milliseconds(500),
+                                                   [this]
+                                                   { return buffer_size_ < MAX_BUFFER_SIZE || !is_downloading_; });
+
+            if (!wait_result)
+            {
+                ESP_LOGW(TAG, "Hết thời gian chờ bộ đệm - kích thước bộ đệm: %d", buffer_size_);
+                heap_caps_free(chunk_data);
+                continue;
+            }
 
             if (is_downloading_)
             {
@@ -789,12 +1031,12 @@ void Esp32Music::DownloadAudioStream(const std::string &music_url)
                 buffer_size_ += bytes_read;
                 total_downloaded += bytes_read;
 
-                // 通知播放线程有新数据
+                // Thông báo cho luồng phát lại có dữ liệu mới
                 buffer_cv_.notify_one();
-
-                if (total_downloaded % (256 * 1024) == 0)
-                { // 每256KB打印一次进度
-                    ESP_LOGI(TAG, "Downloaded %d bytes, buffer size: %d", total_downloaded, buffer_size_);
+                // Ghi log mỗi 128KB thay vì 256KB
+                if (total_downloaded % (128 * 1024) == 0)
+                { // In tiến trình mỗi 128KB
+                    ESP_LOGI(TAG, "Đã tải xuống %d bytes, kích thước buffer: %d", total_downloaded, buffer_size_);
                 }
             }
             else
@@ -803,24 +1045,27 @@ void Esp32Music::DownloadAudioStream(const std::string &music_url)
                 break;
             }
         }
+
+        // Thêm độ trễ nhỏ để tránh tắc nghẽn mạng
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 
     http->Close();
     is_downloading_ = false;
 
-    // 通知播放线程下载完成
+    // Thông báo cho luồng phát lại rằng quá trình tải xuống đã hoàn tất
     {
         std::lock_guard<std::mutex> lock(buffer_mutex_);
         buffer_cv_.notify_all();
     }
 
-    ESP_LOGI(TAG, "Audio stream download thread finished");
+    ESP_LOGI(TAG, "Luồng tải xuống luồng âm thanh đã kết thúc");
 }
 
 // Phát dữ liệu âm thanh streaming
 void Esp32Music::PlayAudioStream()
 {
-    ESP_LOGI(TAG, "Starting audio stream playback");
+    ESP_LOGI(TAG, "Bắt đầu phát luồng âm thanh");
 
     // Khởi tạo các biến theo dõi thời gian
     current_play_time_ms_ = 0;
@@ -830,14 +1075,14 @@ void Esp32Music::PlayAudioStream()
     auto codec = Board::GetInstance().GetAudioCodec();
     if (!codec || !codec->output_enabled())
     {
-        ESP_LOGE(TAG, "Audio codec not available or not enabled");
+        ESP_LOGE(TAG, "Codec âm thanh không khả dụng hoặc chưa được kích hoạt");
         is_playing_ = false;
         return;
     }
 
     if (!mp3_decoder_initialized_)
     {
-        ESP_LOGE(TAG, "MP3 decoder not initialized");
+        ESP_LOGE(TAG, "Bộ giải mã MP3 chưa được khởi tạo");
         is_playing_ = false;
         return;
     }
@@ -849,7 +1094,7 @@ void Esp32Music::PlayAudioStream()
                         { return buffer_size_ >= MIN_BUFFER_SIZE || (!is_downloading_ && !audio_buffer_.empty()); });
     }
 
-    ESP_LOGI(TAG, "Starting playback with buffer size: %d", buffer_size_);
+    ESP_LOGI(TAG, "Bắt đầu phát với kích thước buffer: %d", buffer_size_);
 
     size_t total_played = 0;
     uint8_t *mp3_input_buffer = nullptr;
@@ -860,7 +1105,7 @@ void Esp32Music::PlayAudioStream()
     mp3_input_buffer = (uint8_t *)heap_caps_malloc(8192, MALLOC_CAP_SPIRAM);
     if (!mp3_input_buffer)
     {
-        ESP_LOGE(TAG, "Failed to allocate MP3 input buffer");
+        ESP_LOGE(TAG, "Không thể cấp phát buffer đầu vào MP3");
         is_playing_ = false;
         return;
     }
@@ -879,11 +1124,11 @@ void Esp32Music::PlayAudioStream()
         {
             if (current_state == kDeviceStateSpeaking)
             {
-                ESP_LOGI(TAG, "Device is in speaking state, switching to listening state for music playback");
+                ESP_LOGI(TAG, "Thiết bị đang ở trạng thái nói, chuyển sang trạng thái nghe để phát nhạc");
             }
             if (current_state == kDeviceStateListening)
             {
-                ESP_LOGI(TAG, "Device is in listening state, switching to idle state for music playback");
+                ESP_LOGI(TAG, "Thiết bị đang ở trạng thái nghe, chuyển sang trạng thái rảnh để phát nhạc");
             }
             // Chuyển đổi trạng thái
             app.ToggleChatState(); // Chuyển thành trạng thái chờ
@@ -906,9 +1151,9 @@ void Esp32Music::PlayAudioStream()
             if (display)
             {
                 // Định dạng hiển thị tên bài hát thành 《Tên bài hát》đang phát...
-                std::string formatted_song_name = "《" + current_song_name_ + "》播放中...";
+                std::string formatted_song_name = "《" + current_song_name_ + "》 đang phát...";
                 display->SetMusicInfo(formatted_song_name.c_str());
-                ESP_LOGI(TAG, "Displaying song name: %s", formatted_song_name.c_str());
+                ESP_LOGI(TAG, "Đang hiển thị tên bài hát: %s", formatted_song_name.c_str());
                 song_name_displayed_ = true;
             }
 
@@ -918,11 +1163,11 @@ void Esp32Music::PlayAudioStream()
                 if (display_mode_ == DISPLAY_MODE_SPECTRUM)
                 {
                     display->start();
-                    ESP_LOGI(TAG, "Display start() called for spectrum visualization");
+                    ESP_LOGI(TAG, "Đã gọi Display start() cho hiển thị phổ");
                 }
                 else
                 {
-                    ESP_LOGI(TAG, "Lyrics display mode active, FFT visualization disabled");
+                    ESP_LOGI(TAG, "Chế độ hiển thị lời bài hát đang hoạt động, tắt hiển thị FFT");
                 }
             }
         }
@@ -940,7 +1185,7 @@ void Esp32Music::PlayAudioStream()
                     if (!is_downloading_)
                     {
                         // Tải xuống hoàn thành và bộ đệm trống, kết thúc phát
-                        ESP_LOGI(TAG, "Playback finished, total played: %d bytes", total_played);
+                        ESP_LOGI(TAG, "Phát hoàn tất, tổng phát: %d bytes", total_played);
                         break;
                     }
                     // Chờ dữ liệu mới
@@ -986,7 +1231,7 @@ void Esp32Music::PlayAudioStream()
                     {
                         read_ptr += id3_skip;
                         bytes_left -= id3_skip;
-                        ESP_LOGI(TAG, "Skipped ID3 tag: %u bytes", (unsigned int)id3_skip);
+                        ESP_LOGI(TAG, "Đã bỏ qua thẻ ID3: %u bytes", (unsigned int)id3_skip);
                     }
                     id3_processed = true;
                 }
@@ -1000,7 +1245,7 @@ void Esp32Music::PlayAudioStream()
         int sync_offset = MP3FindSyncWord(read_ptr, bytes_left);
         if (sync_offset < 0)
         {
-            ESP_LOGW(TAG, "No MP3 sync word found, skipping %d bytes", bytes_left);
+            ESP_LOGW(TAG, "Không tìm thấy từ đồng bộ MP3, bỏ qua %d bytes", bytes_left);
             bytes_left = 0;
             continue;
         }
@@ -1025,7 +1270,7 @@ void Esp32Music::PlayAudioStream()
             // Kiểm tra tính hợp lệ cơ bản của thông tin frame, tránh lỗi chia cho 0
             if (mp3_frame_info_.samprate == 0 || mp3_frame_info_.nChans == 0)
             {
-                ESP_LOGW(TAG, "Invalid frame info: rate=%d, channels=%d, skipping",
+                ESP_LOGW(TAG, "Thông tin frame không hợp lệ: rate=%d, channels=%d, bỏ qua",
                          mp3_frame_info_.samprate, mp3_frame_info_.nChans);
                 continue;
             }
@@ -1037,7 +1282,7 @@ void Esp32Music::PlayAudioStream()
             // Cập nhật thời gian phát hiện tại
             current_play_time_ms_ += frame_duration_ms;
 
-            ESP_LOGD(TAG, "Frame %d: time=%lldms, duration=%dms, rate=%d, ch=%d",
+            ESP_LOGD(TAG, "Frame %d: thời gian=%lldms, thời lượng=%dms, tần số=%d, kênh=%d",
                      total_frames_decoded_, current_play_time_ms_, frame_duration_ms,
                      mp3_frame_info_.samprate, mp3_frame_info_.nChans);
 
@@ -1072,17 +1317,17 @@ void Esp32Music::PlayAudioStream()
                     final_pcm_data = mono_buffer.data();
                     final_sample_count = mono_samples;
 
-                    ESP_LOGD(TAG, "Converted stereo to mono: %d -> %d samples",
+                    ESP_LOGD(TAG, "Đã chuyển đổi stereo sang mono: %d -> %d mẫu",
                              stereo_samples, mono_samples);
                 }
                 else if (mp3_frame_info_.nChans == 1)
                 {
                     // Đã là mono, không cần chuyển đổi
-                    ESP_LOGD(TAG, "Already mono audio: %d samples", final_sample_count);
+                    ESP_LOGD(TAG, "Âm thanh đã là mono: %d mẫu", final_sample_count);
                 }
                 else
                 {
-                    ESP_LOGW(TAG, "Unsupported channel count: %d, treating as mono",
+                    ESP_LOGW(TAG, "Số kênh không được hỗ trợ: %d, xử lý như mono",
                              mp3_frame_info_.nChans);
                 }
 
@@ -1109,7 +1354,7 @@ void Esp32Music::PlayAudioStream()
                     final_pcm_data,
                     final_sample_count * sizeof(int16_t));
 
-                ESP_LOGD(TAG, "Sending %d PCM samples (%d bytes, rate=%d, channels=%d->1) to Application",
+                ESP_LOGD(TAG, "Gửi %d mẫu PCM (%d bytes, tần số=%d, kênh=%d->1) đến Application",
                          final_sample_count, pcm_size_bytes, mp3_frame_info_.samprate, mp3_frame_info_.nChans);
 
                 // Gửi đến hàng đợi giải mã âm thanh của Application
@@ -1119,14 +1364,14 @@ void Esp32Music::PlayAudioStream()
                 // In tiến độ phát
                 if (total_played % (128 * 1024) == 0)
                 {
-                    ESP_LOGI(TAG, "Played %d bytes, buffer size: %d", total_played, buffer_size_);
+                    ESP_LOGI(TAG, "Đã phát %d bytes, kích thước buffer: %d", total_played, buffer_size_);
                 }
             }
         }
         else
         {
             // Giải mã thất bại
-            ESP_LOGW(TAG, "MP3 decode failed with error: %d", decode_result);
+            ESP_LOGW(TAG, "Giải mã MP3 thất bại với lỗi: %d", decode_result);
 
             // Bỏ qua một số byte và tiếp tục thử
             if (bytes_left > 1)
@@ -1148,11 +1393,58 @@ void Esp32Music::PlayAudioStream()
     }
 
     // Dọn dẹp cơ bản khi kết thúc phát, nhưng không gọi StopStreaming để tránh thread tự chờ
-    ESP_LOGI(TAG, "Audio stream playback finished, total played: %d bytes", total_played);
-    ESP_LOGI(TAG, "Performing basic cleanup from play thread");
+    ESP_LOGI(TAG, "Phát luồng âm thanh hoàn tất, tổng phát: %d bytes", total_played);
+    ESP_LOGI(TAG, "Thực hiện dọn dẹp cơ bản từ luồng phát");
 
     // Đặt cờ dừng phát
     is_playing_ = false;
+
+    // ===== TỰ ĐỘNG XÓA CACHE SAU KHI PHÁT XONG =====
+    ESP_LOGI(TAG, "Phát lại đã kết thúc - Bắt đầu dọn dẹp bộ đệm tự động");
+
+    // 1. Xóa buffer audio còn lại
+    ClearAudioBuffer();
+    ESP_LOGI(TAG, "Bộ đệm âm thanh đã được xóa");
+
+    // 2. Giải phóng FFT data nếu có
+    if (final_pcm_data_fft != nullptr)
+    {
+        heap_caps_free(final_pcm_data_fft);
+        final_pcm_data_fft = nullptr;
+        ESP_LOGI(TAG, "Dữ liệu FFT đã được xóa");
+    }
+
+    // 3. Reset MP3 decoder để giải phóng internal buffer
+    CleanupMp3Decoder();
+    InitializeMp3Decoder();
+    ESP_LOGI(TAG, "Bộ giải mã MP3 đã được đặt lại");
+
+    // 4. Xóa thông tin bài hát hiện tại
+    current_music_url_.clear();
+    current_lyric_url_.clear();
+    last_downloaded_data_.clear();
+    ESP_LOGI(TAG, "Dữ liệu bài hát đã được xóa");
+
+    // 5. Xóa lyrics cache
+    {
+        std::lock_guard<std::mutex> lock(lyrics_mutex_);
+        lyrics_.clear();
+        lyrics_.shrink_to_fit(); // Giải phóng bộ nhớ vector
+    }
+    ESP_LOGI(TAG, "Bộ đệm lời bài hát đã được xóa");
+
+    // 6. Reset các biến trạng thái
+    current_play_time_ms_ = 0;
+    last_frame_time_ms_ = 0;
+    total_frames_decoded_ = 0;
+    current_lyric_index_ = -1;
+    song_name_displayed_ = false;
+
+    // 7. Log heap info sau khi dọn dẹp
+    ESP_LOGI(TAG, "=== Dọn dẹp bộ đệm hoàn tất ===");
+    ESP_LOGI(TAG, "Heap trống sau khi dọn dẹp: %d byte", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "SPIRAM trống: %d bytes", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+    ESP_LOGI(TAG, "============================");
 
     // Chỉ dừng hiển thị FFT trong chế độ hiển thị phổ
     if (display_mode_ == DISPLAY_MODE_SPECTRUM)
@@ -1162,12 +1454,12 @@ void Esp32Music::PlayAudioStream()
         if (display)
         {
             display->stopFft();
-            ESP_LOGI(TAG, "Stopped FFT display from play thread (spectrum mode)");
+            ESP_LOGI(TAG, "Đã dừng hiển thị FFT từ luồng phát (chế độ phổ)");
         }
     }
     else
     {
-        ESP_LOGI(TAG, "Not in spectrum mode, skipping FFT stop");
+        ESP_LOGI(TAG, "Không ở chế độ phổ, bỏ qua dừng FFT");
     }
 }
 
@@ -1187,7 +1479,7 @@ void Esp32Music::ClearAudioBuffer()
     }
 
     buffer_size_ = 0;
-    ESP_LOGI(TAG, "Audio buffer cleared");
+    ESP_LOGI(TAG, "Đã xóa buffer âm thanh");
 }
 
 // Khởi tạo bộ giải mã MP3
@@ -1196,13 +1488,13 @@ bool Esp32Music::InitializeMp3Decoder()
     mp3_decoder_ = MP3InitDecoder();
     if (mp3_decoder_ == nullptr)
     {
-        ESP_LOGE(TAG, "Failed to initialize MP3 decoder");
+        ESP_LOGE(TAG, "Không thể khởi tạo bộ giải mã MP3");
         mp3_decoder_initialized_ = false;
         return false;
     }
 
     mp3_decoder_initialized_ = true;
-    ESP_LOGI(TAG, "MP3 decoder initialized successfully");
+    ESP_LOGI(TAG, "Khởi tạo bộ giải mã MP3 thành công");
     return true;
 }
 
@@ -1215,7 +1507,7 @@ void Esp32Music::CleanupMp3Decoder()
         mp3_decoder_ = nullptr;
     }
     mp3_decoder_initialized_ = false;
-    ESP_LOGI(TAG, "MP3 decoder cleaned up");
+    ESP_LOGI(TAG, "Đã dọn dẹp bộ giải mã MP3");
 }
 
 // Đặt lại tần số lấy mẫu về giá trị gốc
@@ -1226,20 +1518,20 @@ void Esp32Music::ResetSampleRate()
     if (codec && codec->original_output_sample_rate() > 0 &&
         codec->output_sample_rate() != codec->original_output_sample_rate())
     {
-        ESP_LOGI(TAG, "重置采样率：从 %d Hz 重置到原始值 %d Hz",
+        ESP_LOGI(TAG, "Đặt lại tần số lấy mẫu: từ %d Hz về giá trị gốc %d Hz",
                  codec->output_sample_rate(), codec->original_output_sample_rate());
         if (codec->SetOutputSampleRate(-1))
-        { // -1 表示重置到原始值
-            ESP_LOGI(TAG, "成功重置采样率到原始值: %d Hz", codec->output_sample_rate());
+        { // -1 có nghĩa là đặt lại về giá trị ban đầu
+            ESP_LOGI(TAG, "Đã đặt lại thành công tần số lấy mẫu về giá trị gốc: %d Hz", codec->output_sample_rate());
         }
         else
         {
-            ESP_LOGW(TAG, "无法重置采样率到原始值");
+            ESP_LOGW(TAG, "Không thể đặt lại tần số lấy mẫu về giá trị gốc");
         }
     }
 }
 
-// 跳过MP3文件开头的ID3标签
+// Bỏ qua thẻ ID3 ở đầu file MP3
 size_t Esp32Music::SkipId3Tag(uint8_t *data, size_t size)
 {
     if (!data || size < 10)
@@ -1247,125 +1539,124 @@ size_t Esp32Music::SkipId3Tag(uint8_t *data, size_t size)
         return 0;
     }
 
-    // 检查ID3v2标签头 "ID3"
+    // Kiểm tra header tag ID3v2 "ID3"
     if (memcmp(data, "ID3", 3) != 0)
     {
         return 0;
     }
 
-    // 计算标签大小（synchsafe integer格式）
+    // Tính toán kích thước tag (định dạng số nguyên synchsafe)
     uint32_t tag_size = ((uint32_t)(data[6] & 0x7F) << 21) |
                         ((uint32_t)(data[7] & 0x7F) << 14) |
                         ((uint32_t)(data[8] & 0x7F) << 7) |
                         ((uint32_t)(data[9] & 0x7F));
 
-    // ID3v2头部(10字节) + 标签内容
+    // Header ID3v2 (10 byte) + nội dung tag
     size_t total_skip = 10 + tag_size;
 
-    // 确保不超过可用数据大小
+    // Đảm bảo không vượt quá kích thước dữ liệu có sẵn
     if (total_skip > size)
     {
         total_skip = size;
     }
 
-    ESP_LOGI(TAG, "Found ID3v2 tag, skipping %u bytes", (unsigned int)total_skip);
+    ESP_LOGI(TAG, "Tìm thấy thẻ ID3v2, bỏ qua %u bytes", (unsigned int)total_skip);
     return total_skip;
 }
 
-// 下载歌词
+// Tải lời bài hát
 bool Esp32Music::DownloadLyrics(const std::string &lyric_url)
 {
-    ESP_LOGI(TAG, "Downloading lyrics from: %s", lyric_url.c_str());
+    ESP_LOGI(TAG, "Đang tải lời bài hát từ: %s", lyric_url.c_str());
 
-    // 检查URL是否为空
+    // Kiểm tra xem URL có trống không
     if (lyric_url.empty())
     {
-        ESP_LOGE(TAG, "Lyric URL is empty!");
+        ESP_LOGE(TAG, "URL lời bài hát trống!");
         return false;
     }
 
-    // 添加重试逻辑
+    // Thêm logic thử lại
     const int max_retries = 3;
     int retry_count = 0;
     bool success = false;
     std::string lyric_content;
     std::string current_url = lyric_url;
     int redirect_count = 0;
-    const int max_redirects = 5; // 最多允许5次重定向
+    const int max_redirects = 5; // Cho phép tối đa 5 lần chuyển hướng
 
     while (retry_count < max_retries && !success && redirect_count < max_redirects)
     {
         if (retry_count > 0)
         {
-            ESP_LOGI(TAG, "Retrying lyric download (attempt %d of %d)", retry_count + 1, max_retries);
-            // 重试前暂停一下
+            ESP_LOGI(TAG, "Thử lại tải lời bài hát (lần thử %d/%d)", retry_count + 1, max_retries);
+            // Tạm dừng một chút trước khi thử lại
             std::this_thread::sleep_for(std::chrono::milliseconds(500));
         }
 
-        // 使用Board提供的HTTP客户端
+        // Sử dụng HTTP client do Board cung cấp
         auto network = Board::GetInstance().GetNetwork();
         auto http = network->CreateHttp(0);
         if (!http)
         {
-            ESP_LOGE(TAG, "Failed to create HTTP client for lyric download");
+            ESP_LOGE(TAG, "Không thể tạo HTTP client để tải lời bài hát");
             retry_count++;
             continue;
         }
 
-        // 设置基本请求头
+        // Đặt header request cơ bản
         http->SetHeader("User-Agent", "ESP32-Music-Player/1.0");
         http->SetHeader("Accept", "text/plain");
 
-        // 添加ESP32认证头
+        // Thêm header xác thực ESP32
         add_auth_headers(http.get());
 
-        // 打开GET连接
-        ESP_LOGI(TAG, "小智开源音乐固件qq交流群:826072986");
+        // Mở kết nối GET
         if (!http->Open("GET", current_url))
         {
-            ESP_LOGE(TAG, "Failed to open HTTP connection for lyrics");
-            // 移除delete http; 因为unique_ptr会自动管理内存
+            ESP_LOGE(TAG, "Không thể mở kết nối HTTP cho lời bài hát");
+            // Xóa delete http; vì unique_ptr sẽ tự động quản lý bộ nhớ
             retry_count++;
             continue;
         }
 
-        // 检查HTTP状态码
+        // Kiểm tra mã trạng thái HTTP
         int status_code = http->GetStatusCode();
-        ESP_LOGI(TAG, "Lyric download HTTP status code: %d", status_code);
+        ESP_LOGI(TAG, "Mã trạng thái HTTP tải lời bài hát: %d", status_code);
 
-        // 处理重定向 - 由于Http类没有GetHeader方法，我们只能根据状态码判断
+        // Xử lý chuyển hướng - Vì lớp Http không có phương thức GetHeader, chúng ta chỉ có thể phán đoán dựa trên mã trạng thái
         if (status_code == 301 || status_code == 302 || status_code == 303 || status_code == 307 || status_code == 308)
         {
-            // 由于无法获取Location头，只能报告重定向但无法继续
-            ESP_LOGW(TAG, "Received redirect status %d but cannot follow redirect (no GetHeader method)", status_code);
+            // Vì không thể lấy header Location, chỉ có thể báo cáo chuyển hướng nhưng không thể tiếp tục
+            ESP_LOGW(TAG, "Nhận được trạng thái chuyển hướng %d nhưng không thể theo chuyển hướng (không có phương thức GetHeader)", status_code);
             http->Close();
             retry_count++;
             continue;
         }
 
-        // 非200系列状态码视为错误
+        // Mã trạng thái không thuộc series 200 được coi là lỗi
         if (status_code < 200 || status_code >= 300)
         {
-            ESP_LOGE(TAG, "HTTP GET failed with status code: %d", status_code);
+            ESP_LOGE(TAG, "HTTP GET thất bại với mã trạng thái: %d", status_code);
             http->Close();
             retry_count++;
             continue;
         }
 
-        // 读取响应
+        // Đọc phản hồi
         lyric_content.clear();
         char buffer[1024];
         int bytes_read;
         bool read_error = false;
         int total_read = 0;
 
-        // 由于无法获取Content-Length和Content-Type头，我们不知道预期大小和内容类型
-        ESP_LOGD(TAG, "Starting to read lyric content");
+        // Vì không thể lấy header Content-Length và Content-Type, chúng ta không biết kích thước và loại nội dung dự kiến
+        ESP_LOGD(TAG, "Bắt đầu đọc nội dung lời bài hát");
 
         while (true)
         {
             bytes_read = http->Read(buffer, sizeof(buffer) - 1);
-            // ESP_LOGD(TAG, "Lyric HTTP read returned %d bytes", bytes_read); // 注释掉以减少日志输出
+            // ESP_LOGD(TAG, "Lyric HTTP read returned %d bytes", bytes_read); // Chú thích để giảm output log
 
             if (bytes_read > 0)
             {
@@ -1373,32 +1664,32 @@ bool Esp32Music::DownloadLyrics(const std::string &lyric_url)
                 lyric_content += buffer;
                 total_read += bytes_read;
 
-                // 定期打印下载进度 - 改为DEBUG级别减少输出
+                // In tiến độ tải xuống định kỳ - đổi sang cấp DEBUG để giảm output
                 if (total_read % 4096 == 0)
                 {
-                    ESP_LOGD(TAG, "Downloaded %d bytes so far", total_read);
+                    ESP_LOGD(TAG, "Đã tải xuống %d bytes", total_read);
                 }
             }
             else if (bytes_read == 0)
             {
-                // 正常结束，没有更多数据
-                ESP_LOGD(TAG, "Lyric download completed, total bytes: %d", total_read);
+                // Kết thúc bình thường, không còn dữ liệu
+                ESP_LOGD(TAG, "Tải lời bài hát hoàn tất, tổng bytes: %d", total_read);
                 success = true;
                 break;
             }
             else
             {
-                // bytes_read < 0，可能是ESP-IDF的已知问题
-                // 如果已经读取到了一些数据，则认为下载成功
+                // bytes_read < 0, có thể là một vấn đề đã biết của ESP-IDF
+                // Nếu đã đọc được một số dữ liệu, thì coi như tải xuống thành công
                 if (!lyric_content.empty())
                 {
-                    ESP_LOGW(TAG, "HTTP read returned %d, but we have data (%d bytes), continuing", bytes_read, lyric_content.length());
+                    ESP_LOGW(TAG, "HTTP read trả về %d, nhưng chúng ta có dữ liệu (%d bytes), tiếp tục", bytes_read, lyric_content.length());
                     success = true;
                     break;
                 }
                 else
                 {
-                    ESP_LOGE(TAG, "Failed to read lyric data: error code %d", bytes_read);
+                    ESP_LOGE(TAG, "Không thể đọc dữ liệu lời bài hát: mã lỗi %d", bytes_read);
                     read_error = true;
                     break;
                 }
@@ -1413,66 +1704,66 @@ bool Esp32Music::DownloadLyrics(const std::string &lyric_url)
             continue;
         }
 
-        // 如果成功读取数据，跳出重试循环
+        // Nếu đọc dữ liệu thành công, thoát khỏi vòng lặp thử lại
         if (success)
         {
             break;
         }
     }
 
-    // 检查是否超过了最大重试次数
+    // Kiểm tra xem đã vượt quá số lần thử lại tối đa chưa
     if (retry_count >= max_retries)
     {
-        ESP_LOGE(TAG, "Failed to download lyrics after %d attempts", max_retries);
+        ESP_LOGE(TAG, "Không thể tải lời bài hát sau %d lần thử", max_retries);
         return false;
     }
 
-    // 记录前几个字节的数据，帮助调试
+    // Ghi lại vài byte dữ liệu đầu tiên để giúp gỡ lỗi
     if (!lyric_content.empty())
     {
         size_t preview_size = std::min(lyric_content.size(), size_t(50));
         std::string preview = lyric_content.substr(0, preview_size);
-        ESP_LOGD(TAG, "Lyric content preview (%d bytes): %s", lyric_content.length(), preview.c_str());
+        ESP_LOGD(TAG, "Xem trước nội dung lời bài hát (%d bytes): %s", lyric_content.length(), preview.c_str());
     }
     else
     {
-        ESP_LOGE(TAG, "Failed to download lyrics or lyrics are empty");
+        ESP_LOGE(TAG, "Tải lời bài hát thất bại hoặc lời bài hát trống");
         return false;
     }
 
-    ESP_LOGI(TAG, "Lyrics downloaded successfully, size: %d bytes", lyric_content.length());
+    ESP_LOGI(TAG, "Tải lời bài hát thành công, kích thước: %d bytes", lyric_content.length());
     return ParseLyrics(lyric_content);
 }
 
-// 解析歌词
+// Phân tích lời bài hát
 bool Esp32Music::ParseLyrics(const std::string &lyric_content)
 {
-    ESP_LOGI(TAG, "Parsing lyrics content");
+    ESP_LOGI(TAG, "Đang phân tích nội dung lời bài hát");
 
-    // 使用锁保护lyrics_数组访问
+    // Sử dụng khóa để bảo vệ quyền truy cập mảng lyrics_
     std::lock_guard<std::mutex> lock(lyrics_mutex_);
 
     lyrics_.clear();
 
-    // 按行分割歌词内容
+    // Chia nhỏ nội dung lời bài hát theo dòng
     std::istringstream stream(lyric_content);
     std::string line;
 
     while (std::getline(stream, line))
     {
-        // 去除行尾的回车符
+        // Xóa ký tự xuống dòng ở cuối dòng
         if (!line.empty() && line.back() == '\r')
         {
             line.pop_back();
         }
 
-        // 跳过空行
+        // Bỏ qua các dòng trống
         if (line.empty())
         {
             continue;
         }
 
-        // 解析LRC格式: [mm:ss.xx]歌词文本
+        // Phân tích định dạng LRC: [mm:ss.xx]văn bản lời bài hát
         if (line.length() > 10 && line[0] == '[')
         {
             size_t close_bracket = line.find(']');
@@ -1481,14 +1772,14 @@ bool Esp32Music::ParseLyrics(const std::string &lyric_content)
                 std::string tag_or_time = line.substr(1, close_bracket - 1);
                 std::string content = line.substr(close_bracket + 1);
 
-                // 检查是否是元数据标签而不是时间戳
-                // 元数据标签通常是 [ti:标题], [ar:艺术家], [al:专辑] 等
+                // Kiểm tra xem đó là thẻ siêu dữ liệu hay dấu thời gian
+                // Thẻ siêu dữ liệu thường là [ti:Tiêu đề], [ar:Nghệ sĩ], [al:Album], v.v.
                 size_t colon_pos = tag_or_time.find(':');
                 if (colon_pos != std::string::npos)
                 {
                     std::string left_part = tag_or_time.substr(0, colon_pos);
 
-                    // 检查冒号左边是否是时间（数字）
+                    // Kiểm tra xem bên trái dấu hai chấm có phải là thời gian (số) không
                     bool is_time_format = true;
                     for (char c : left_part)
                     {
@@ -1499,28 +1790,28 @@ bool Esp32Music::ParseLyrics(const std::string &lyric_content)
                         }
                     }
 
-                    // 如果不是时间格式，跳过这一行（元数据标签）
+                    // Nếu không phải định dạng thời gian, bỏ qua dòng này (thẻ siêu dữ liệu)
                     if (!is_time_format)
                     {
-                        // 可以在这里处理元数据，例如提取标题、艺术家等信息
-                        ESP_LOGD(TAG, "Skipping metadata tag: [%s]", tag_or_time.c_str());
+                        // Ở đây có thể xử lý siêu dữ liệu, ví dụ như trích xuất thông tin tiêu đề, nghệ sĩ, v.v.
+                        ESP_LOGD(TAG, "Bỏ qua thẻ siêu dữ liệu: [%s]", tag_or_time.c_str());
                         continue;
                     }
 
-                    // 是时间格式，解析时间戳
+                    // Là định dạng thời gian, phân tích dấu thời gian
                     try
                     {
                         int minutes = std::stoi(tag_or_time.substr(0, colon_pos));
                         float seconds = std::stof(tag_or_time.substr(colon_pos + 1));
                         int timestamp_ms = minutes * 60 * 1000 + (int)(seconds * 1000);
 
-                        // 安全处理歌词文本，确保UTF-8编码正确
+                        // Xử lý văn bản lời bài hát một cách an toàn, đảm bảo mã hóa UTF-8 chính xác
                         std::string safe_lyric_text;
                         if (!content.empty())
                         {
-                            // 创建安全副本并验证字符串
+                            // Tạo bản sao an toàn và xác thực chuỗi
                             safe_lyric_text = content;
-                            // 确保字符串以null结尾
+                            // Đảm bảo chuỗi kết thúc bằng null
                             safe_lyric_text.shrink_to_fit();
                         }
 
@@ -1528,51 +1819,51 @@ bool Esp32Music::ParseLyrics(const std::string &lyric_content)
 
                         if (!safe_lyric_text.empty())
                         {
-                            // 限制日志输出长度，避免中文字符截断问题
+                            // Hạn chế độ dài output log, tránh vấn đề cắt ngắn ký tự tiếng Trung
                             size_t log_len = std::min(safe_lyric_text.length(), size_t(50));
                             std::string log_text = safe_lyric_text.substr(0, log_len);
-                            ESP_LOGD(TAG, "Parsed lyric: [%d ms] %s", timestamp_ms, log_text.c_str());
+                            ESP_LOGD(TAG, "Lời bài hát đã phân tích: [%d ms] %s", timestamp_ms, log_text.c_str());
                         }
                         else
                         {
-                            ESP_LOGD(TAG, "Parsed lyric: [%d ms] (empty)", timestamp_ms);
+                            ESP_LOGD(TAG, "Lời bài hát đã phân tích: [%d ms] (trống)", timestamp_ms);
                         }
                     }
                     catch (const std::exception &e)
                     {
-                        ESP_LOGW(TAG, "Failed to parse time: %s", tag_or_time.c_str());
+                        ESP_LOGW(TAG, "Phân tích thời gian thất bại: %s", tag_or_time.c_str());
                     }
                 }
             }
         }
     }
 
-    // 按时间戳排序
+    // Sắp xếp theo dấu thời gian
     std::sort(lyrics_.begin(), lyrics_.end());
 
-    ESP_LOGI(TAG, "Parsed %d lyric lines", lyrics_.size());
+    ESP_LOGI(TAG, "Đã phân tích %d dòng lời bài hát", lyrics_.size());
     return !lyrics_.empty();
 }
 
-// 歌词显示线程
+// Thread hiển thị lời bài hát
 void Esp32Music::LyricDisplayThread()
 {
-    ESP_LOGI(TAG, "Lyric display thread started");
+    ESP_LOGI(TAG, "Đã bắt đầu thread hiển thị lời bài hát");
 
     if (!DownloadLyrics(current_lyric_url_))
     {
-        ESP_LOGE(TAG, "Failed to download or parse lyrics");
+        ESP_LOGE(TAG, "Không thể tải hoặc phân tích lời bài hát");
         is_lyric_running_ = false;
         return;
     }
 
-    // 定期检查是否需要更新显示(频率可以降低)
+    // Kiểm tra định kỳ có cần cập nhật hiển thị (tần suất có thể giảm)
     while (is_lyric_running_ && is_playing_)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    ESP_LOGI(TAG, "Lyric display thread finished");
+    ESP_LOGI(TAG, "Thread hiển thị lời bài hát đã kết thúc");
 }
 
 void Esp32Music::UpdateLyricDisplay(int64_t current_time_ms)
@@ -1584,13 +1875,13 @@ void Esp32Music::UpdateLyricDisplay(int64_t current_time_ms)
         return;
     }
 
-    // 查找当前应该显示的歌词
+    // Tìm lời bài hát hiện tại cần hiển thị
     int new_lyric_index = -1;
 
-    // 从当前歌词索引开始查找，提高效率
+    // Bắt đầu tìm kiếm từ chỉ mục lời bài hát hiện tại để nâng cao hiệu quả
     int start_index = (current_lyric_index_.load() >= 0) ? current_lyric_index_.load() : 0;
 
-    // 正向查找：找到最后一个时间戳小于等于当前时间的歌词
+    // Tìm kiếm xuôi: tìm lời bài hát cuối cùng có dấu thời gian nhỏ hơn hoặc bằng thời gian hiện tại
     for (int i = start_index; i < (int)lyrics_.size(); i++)
     {
         if (lyrics_[i].first <= current_time_ms)
@@ -1599,17 +1890,17 @@ void Esp32Music::UpdateLyricDisplay(int64_t current_time_ms)
         }
         else
         {
-            break; // 时间戳已超过当前时间
+            break; // Dấu thời gian đã vượt quá thời gian hiện tại
         }
     }
 
-    // 如果没有找到(可能当前时间比第一句歌词还早)，显示空
+    // Nếu không tìm thấy (có thể thời gian hiện tại sớm hơn cả câu lời đầu tiên), hiển thị trống
     if (new_lyric_index == -1)
     {
         new_lyric_index = -1;
     }
 
-    // 如果歌词索引发生变化，更新显示
+    // Nếu chỉ mục lời bài hát thay đổi, cập nhật hiển thị
     if (new_lyric_index != current_lyric_index_)
     {
         current_lyric_index_ = new_lyric_index;
@@ -1625,33 +1916,33 @@ void Esp32Music::UpdateLyricDisplay(int64_t current_time_ms)
                 lyric_text = lyrics_[current_lyric_index_].second;
             }
 
-            // 显示歌词
+            // Hiển thị lời bài hát
             display->SetChatMessage("lyric", lyric_text.c_str());
 
-            ESP_LOGD(TAG, "Lyric update at %lldms: %s",
+            ESP_LOGD(TAG, "Cập nhật lời bài hát lúc %lldms: %s",
                      current_time_ms,
-                     lyric_text.empty() ? "(no lyric)" : lyric_text.c_str());
+                     lyric_text.empty() ? "(không có lời)" : lyric_text.c_str());
         }
     }
 }
 
-// 删除复杂的认证初始化方法，使用简单的静态函数
+// Xóa phương thức khởi tạo xác thực phức tạp, sử dụng hàm tĩnh đơn giản
 
-// 删除复杂的类方法，使用简单的静态函数
+// Xóa phương pháp lớp phức tạp, sử dụng hàm tĩnh đơn giản
 
 /**
- * @brief 添加认证头到HTTP请求
- * @param http_client HTTP客户端指针
+ * @brief Thêm header xác thực vào HTTP request
+ * @param http_client Con trỏ HTTP client
  *
- * 添加的认证头包括：
- * - X-MAC-Address: 设备MAC地址
- * - X-Chip-ID: 设备芯片ID
- * - X-Timestamp: 当前时间戳
- * - X-Dynamic-Key: 动态生成的密钥
+ * Các header xác thực được thêm vào bao gồm:
+ * - X-MAC-Address: Địa chỉ MAC của thiết bị
+ * - X-Chip-ID: ID chip của thiết bị
+ * - X-Timestamp: Dấu thời gian hiện tại
+ * - X-Dynamic-Key: Khóa được tạo động
  */
-// 删除复杂的AddAuthHeaders方法，使用简单的静态函数
+// Xóa phương thức AddAuthHeaders phức tạp, sử dụng hàm tĩnh đơn giản
 
-// 删除复杂的认证验证和配置方法，使用简单的静态函数
+// Xóa các phương thức xác minh và cấu hình xác thực phức tạp, sử dụng các hàm tĩnh đơn giản
 
 // 显示模式控制方法实现
 void Esp32Music::SetDisplayMode(DisplayMode mode)
@@ -1659,7 +1950,7 @@ void Esp32Music::SetDisplayMode(DisplayMode mode)
     DisplayMode old_mode = display_mode_.load();
     display_mode_ = mode;
 
-    ESP_LOGI(TAG, "Display mode changed from %s to %s",
-             (old_mode == DISPLAY_MODE_SPECTRUM) ? "SPECTRUM" : "LYRICS",
-             (mode == DISPLAY_MODE_SPECTRUM) ? "SPECTRUM" : "LYRICS");
+    ESP_LOGI(TAG, "Chế độ hiển thị đã chuyển từ %s sang %s",
+             (old_mode == DISPLAY_MODE_SPECTRUM) ? "PHỔ" : "LỜI BÀI HÁT",
+             (mode == DISPLAY_MODE_SPECTRUM) ? "PHỔ" : "LỜI BÀI HÁT");
 }

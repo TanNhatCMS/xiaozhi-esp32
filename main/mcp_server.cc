@@ -191,14 +191,14 @@ void McpServer::AddCommonTools()
                     // Chuyển về chữ thường để so sánh
                     std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(), ::tolower);
 
-                    if (mode_str == "spectrum" || mode_str == "频谱")
+                    if (mode_str == "spectrum" || mode_str == "频谱" || mode_str == "hiển thị phổ tần")
                     {
                         // Chuyển sang chế độ hiển thị phổ tần
                         auto esp32_music = static_cast<Esp32Music *>(music);
                         esp32_music->SetDisplayMode(Esp32Music::DISPLAY_MODE_SPECTRUM);
                         return "{\"success\": true, \"message\": \"Đã chuyển sang chế độ hiển thị phổ tần\"}";
                     }
-                    else if (mode_str == "lyrics" || mode_str == "歌词")
+                    else if (mode_str == "lyrics" || mode_str == "歌词" || mode_str == "hiển thị lời" || mode_str == "hiển thị lời bài hát")
                     {
                         // Chuyển sang chế độ hiển thị lời bài hát
                         auto esp32_music = static_cast<Esp32Music *>(music);

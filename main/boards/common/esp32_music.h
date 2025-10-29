@@ -73,6 +73,7 @@ private:
     void DownloadAudioStream(const std::string& music_url);
     void PlayAudioStream();
     void ClearAudioBuffer();
+    void ForceCleanupCache();
     bool InitializeMp3Decoder();
     void CleanupMp3Decoder();
     void ResetSampleRate();  // 重置采样率到原始值
