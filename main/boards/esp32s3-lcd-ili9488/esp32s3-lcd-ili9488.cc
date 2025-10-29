@@ -9,7 +9,8 @@
 #include <wifi_station.h>
 
 #include "application.h"
-#include "codecs/max98357a_inmp441_codec.h"
+#include "codecs/no_audio_codec.h"
+// #include "codecs/max98357a_inmp441_codec.h"
 #include "button.h"
 #include "config.h"
 #include "power_save_timer.h"
@@ -200,14 +201,11 @@ public:
 
     virtual AudioCodec *GetAudioCodec() override
     {
-        static Max98357aInmp441Codec audio_codec(
-            AUDIO_INPUT_SAMPLE_RATE,
-            AUDIO_OUTPUT_SAMPLE_RATE,
-            AUDIO_I2S_GPIO_BCLK,
-            AUDIO_I2S_GPIO_WS,
-            AUDIO_I2S_GPIO_DOUT,
-            AUDIO_I2S_GPIO_DIN,
-            MAX98357A_SD_MODE_PIN);
+        static NoAudioCodecSimplex audio_codec(
+            AUDIO_INPUT_SAMPLE_RATE, AUDIO_OUTPUT_SAMPLE_RATE,
+            AUDIO_I2S_SPK_GPIO_BCLK, AUDIO_I2S_SPK_GPIO_LRCK,
+            AUDIO_I2S_SPK_GPIO_DOUT, AUDIO_I2S_MIC_GPIO_SCK,
+            AUDIO_I2S_MIC_GPIO_WS, AUDIO_I2S_MIC_GPIO_DIN);
         return &audio_codec;
     }
 
