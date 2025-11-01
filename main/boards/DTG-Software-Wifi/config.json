@@ -2,7 +2,7 @@
     "target": "esp32s3",
     "builds": [
         {
-            "name": "DGT-Software-wifi",
+            "name": "DGT-Software-Wifi",
             "sdkconfig_append": []
         }
     ]
