@@ -15,7 +15,9 @@
 #include "ota.h"
 #include "audio_service.h"
 #include "device_state_event.h"
-
+#include "esp32_sd_music.h"
+#include "esp32_music.h"
+#include "esp32_radio.h"
 
 #define MAIN_EVENT_SCHEDULE (1 << 0)
 #define MAIN_EVENT_SEND_AUDIO (1 << 1)
@@ -61,8 +63,13 @@ public:
     void SendMcpMessage(const std::string& payload);
     void SetAecMode(AecMode mode);
     AecMode GetAecMode() const { return aec_mode_; }
+    // 新增：接收外部音频数据（如音乐播放）
+    void AddAudioData(AudioStreamPacket&& packet);
     void PlaySound(const std::string_view& sound);
     AudioService& GetAudioService() { return audio_service_; }
+	Esp32Music* GetMusic() { return music_; }
+	Esp32Radio* GetRadio() { return radio_; }
+	Esp32SdMusic* GetSdMusic() { return sd_music_; }
 
 private:
     Application();
@@ -78,6 +85,9 @@ private:
     AecMode aec_mode_ = kAecOff;
     std::string last_error_message_;
     AudioService audio_service_;
+    Esp32Music* music_ = nullptr;
+    Esp32Radio* radio_ = nullptr;
+    Esp32SdMusic* sd_music_ = nullptr;
 
     bool has_server_time_ = false;
     bool aborted_ = false;

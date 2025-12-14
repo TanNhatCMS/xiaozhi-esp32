@@ -8,6 +8,9 @@ set(SOURCES "audio/audio_codec.cc"
             "audio/codecs/es8388_audio_codec.cc"
             "audio/codecs/es8389_audio_codec.cc"
             "audio/codecs/dummy_audio_codec.cc"
+            "music/esp32_music.cc"
+            "music/esp32_radio.cc"
+            "music/esp32_sd_music.cc"
             "audio/processors/audio_debugger.cc"
             "led/single_led.cc"
             "led/circular_strip.cc"
@@ -31,13 +34,14 @@ set(SOURCES "audio/audio_codec.cc"
             "system_info.cc"
             "application.cc"
             "ota.cc"
+            "ota_server.cc"
             "settings.cc"
             "device_state_event.cc"
             "assets.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "protocols" "music")
 
 # Add board common files
 file(GLOB BOARD_COMMON_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/boards/common/*.cc)
@@ -63,7 +67,17 @@ set(BUILTIN_ICON_FONT font_awesome_14_1)
 
 # Add board files according to BOARD_TYPE
 # Set default assets if the board uses partition table V2
-if(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI)
+if(CONFIG_BOARD_TYPE_XIAOZHI_AI_IOT_VIETNAM_ES3N28P_LCD_2_8)
+    set(BOARD_TYPE "xiaozhi-ai-iot-vietnam-es3n28p-lcd-2.8")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
+    set(BUILTIN_ICON_FONT font_awesome_20_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
+elseif(CONFIG_BOARD_TYPE_XIAOZHI_AI_IOT_VIETNAM_LCD_SDCARD)
+    set(BOARD_TYPE "xiaozhi-ai-iot-vietnam-lcd-sdcard")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_16_4)
+    set(BUILTIN_ICON_FONT font_awesome_16_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
+elseif(CONFIG_BOARD_TYPE_BREAD_COMPACT_WIFI)
     set(BOARD_TYPE "bread-compact-wifi")
     set(BUILTIN_TEXT_FONT font_puhui_basic_14_1)
     set(BUILTIN_ICON_FONT font_awesome_14_1)
@@ -279,6 +293,16 @@ elseif(CONFIG_BOARD_TYPE_WAVESHARE_C6_TOUCH_AMOLED_1_43)
     set(BUILTIN_TEXT_FONT font_puhui_basic_30_4)
     set(BUILTIN_ICON_FONT font_awesome_30_4)
     set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+elseif(CONFIG_BOARD_TYPE_WAVESHARE_C6_TOUCH_AMOLED_1_32)
+    set(BOARD_TYPE "waveshare-c6-touch-amoled-1.32")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
+    set(BUILTIN_ICON_FONT font_awesome_20_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
+elseif(CONFIG_BOARD_TYPE_WAVESHARE_S3_TOUCH_AMOLED_1_32)
+    set(BOARD_TYPE "waveshare-s3-touch-amoled-1.32")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
+    set(BUILTIN_ICON_FONT font_awesome_20_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
 elseif(CONFIG_BOARD_TYPE_WAVESHARE_P4_NANO)
     set(BOARD_TYPE "waveshare-p4-nano")
     set(BUILTIN_TEXT_FONT font_puhui_basic_30_4)
@@ -526,6 +550,11 @@ elseif(CONFIG_BOARD_TYPE_WIRELESS_TAG_WTP4C5MP07S)
     set(BUILTIN_TEXT_FONT font_puhui_basic_30_4)
     set(BUILTIN_ICON_FONT font_awesome_30_4)
     set(DEFAULT_EMOJI_COLLECTION twemoji_64)
+elseif(CONFIG_BOARD_TYPE_AIPI_LITE)
+    set(BOARD_TYPE "aipi-lite")
+    set(BUILTIN_TEXT_FONT font_puhui_basic_14_1)
+    set(BUILTIN_ICON_FONT font_awesome_14_1)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_32)
 endif()
 
 file(GLOB BOARD_SOURCES
@@ -655,6 +684,7 @@ if(NOT LANG_DIR STREQUAL "en-US")
 endif()
 
 file(GLOB COMMON_SOUNDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/common/*.ogg)
+file(GLOB WEB_BROWERS ${CMAKE_CURRENT_SOURCE_DIR}/assets/web_browser/*.html)
 
 # If target chip is ESP32, exclude specific files to avoid build errors
 if(CONFIG_IDF_TARGET_ESP32)
@@ -668,7 +698,7 @@ if(CONFIG_IDF_TARGET_ESP32)
 endif()
 
 idf_component_register(SRCS ${SOURCES}
-                    EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS}
+                    EMBED_FILES ${LANG_SOUNDS} ${COMMON_SOUNDS} ${WEB_BROWERS}
                     INCLUDE_DIRS ${INCLUDE_DIRS}
                     WHOLE_ARCHIVE
                     )

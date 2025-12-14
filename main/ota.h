@@ -12,7 +12,7 @@ public:
     Ota();
     ~Ota();
 
-    bool CheckVersion();
+    bool CheckVersion(std::string& url);
     esp_err_t Activate();
     bool HasActivationChallenge() { return has_activation_challenge_; }
     bool HasNewVersion() { return has_new_version_; }
@@ -46,6 +46,7 @@ private:
     std::string firmware_url_;
     std::string activation_challenge_;
     std::string serial_number_;
+    int firmware_size_ = 0;
     int activation_timeout_ms_ = 30000;
 
     bool Upgrade(const std::string& firmware_url);

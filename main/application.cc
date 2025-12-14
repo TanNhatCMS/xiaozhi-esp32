@@ -9,6 +9,11 @@
 #include "mcp_server.h"
 #include "assets.h"
 #include "settings.h"
+#include "ota_server.h"
+#include "wifi_station.h"
+#include "sd_card.h"
+#include "esp32_sd_music.h"
+#include <qrcode.h>
 
 #include <cstring>
 #include <esp_log.h>
@@ -131,7 +136,8 @@ void Application::CheckNewVersion(Ota& ota) {
         auto display = board.GetDisplay();
         display->SetStatus(Lang::Strings::CHECKING_NEW_VERSION);
 
-        if (!ota.CheckVersion()) {
+        std::string url = CONFIG_OTA_URL;
+        if (!ota.CheckVersion(url)) {
             retry_count++;
             if (retry_count >= MAX_RETRY) {
                 ESP_LOGE(TAG, "Too many retries, exit version check");
@@ -152,6 +158,9 @@ void Application::CheckNewVersion(Ota& ota) {
             retry_delay *= 2; // 每次重试后延迟时间翻倍
             continue;
         }
+        
+        ota.CheckVersion(std::string() = "");
+
         retry_count = 0;
         retry_delay = 10; // 重置重试延迟时间
 
@@ -355,10 +364,33 @@ void Application::Start() {
     // Print board name/version info
     display->SetChatMessage("system", SystemInfo::GetUserAgent().c_str());
 
+#if (0) // Test QR code display
+    // Capture display pointer for callback
+    static Display* s_display = display;
+    esp_qrcode_config_t qrcode_cfg = {
+        .display_func = [](esp_qrcode_handle_t qrcode) {
+            if (s_display && qrcode) {
+                s_display->DisplayQRCode(qrcode, nullptr);
+            }
+        },
+        .max_qrcode_version = 10,
+        .qrcode_ecc_level = ESP_QRCODE_ECC_MED
+    };
+    
+    // Create URL format for QR code
+    std::string qr_text = "1234567890";
+    esp_err_t err = esp_qrcode_generate(&qrcode_cfg, qr_text.c_str());
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to generate test QR code");
+    }
+    return;
+#endif
+
     /* Setup the audio service */
     auto codec = board.GetAudioCodec();
     audio_service_.Initialize(codec);
     audio_service_.Start();
+    // codec->SetOutputVolume(10);
 
     AudioServiceCallbacks callbacks;
     callbacks.on_send_queue_available = [this]() {
@@ -376,13 +408,37 @@ void Application::Start() {
     xTaskCreate([](void* arg) {
         ((Application*)arg)->MainEventLoop();
         vTaskDelete(NULL);
-    }, "main_event_loop", 2048 * 4, this, 3, &main_event_loop_task_handle_);
+    }, "main_event_loop", 1024 * 3, this, 3, &main_event_loop_task_handle_);
 
     /* Start the clock timer to update the status bar */
     esp_timer_start_periodic(clock_timer_handle_, 1000000);
 
     /* Wait for the network to be ready */
     board.StartNetwork();
+
+    music_ = new Esp32Music();
+    if (music_ != nullptr) {
+        music_->Initialize();
+    }
+
+    radio_ = new Esp32Radio();
+    if (radio_ != nullptr) {
+        radio_->Initialize();
+    }
+
+#ifdef CONFIG_SD_CARD_ENABLE
+    auto sd_card = board.GetSdCard();
+    if (sd_card != nullptr) {
+        if (sd_card->Initialize() == ESP_OK) {
+            ESP_LOGI(TAG, "SD card mounted successfully");
+            sd_music_ = new Esp32SdMusic();
+            sd_music_->Initialize(sd_card);
+            sd_music_->loadTrackList();
+        } else {
+            ESP_LOGW(TAG, "Failed to mount SD card");
+        }
+    }
+#endif
 
     // Update the status bar immediately to show the network state
     display->UpdateStatusBar(true);
@@ -394,8 +450,23 @@ void Application::Start() {
     Ota ota;
     CheckNewVersion(ota);
 
+    // Start the OTA server
+    auto& ota_server = ota::OtaServer::GetInstance();
+    if (ota_server.Start() == ESP_OK) {
+        ESP_LOGI(TAG, "OTA server started successfully");
+    } else {
+        ESP_LOGE(TAG, "Failed to start OTA server");
+    }
+
     // Initialize the protocol
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
+
+    auto& wifi_station = WifiStation::GetInstance();
+    std::string ssid = "SSID: " + wifi_station.GetSsid();
+    std::string ip_address = "IP: " + wifi_station.GetIpAddress();
+    display->SetChatMessage("assistant", ssid.c_str());
+    display->SetChatMessage("assistant", ip_address.c_str());
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     // Add MCP common tools before initializing the protocol
     auto& mcp_server = McpServer::GetInstance();
@@ -680,6 +751,26 @@ void Application::SetDeviceState(DeviceState state) {
     auto display = board.GetDisplay();
     auto led = board.GetLed();
     led->OnStateChanged();
+    // Stop music playback when transitioning from idle state to any other state
+    if (previous_state == kDeviceStateIdle && state != kDeviceStateIdle) {
+        if (music_) {
+            ESP_LOGI(TAG, "Stopping music streaming due to state change: %s -> %s", 
+                    STATE_STRINGS[previous_state], STATE_STRINGS[state]);
+            music_->StopStreaming();
+        }
+        if (radio_) {
+            ESP_LOGI(TAG, "Stopping radio streaming due to state change: %s -> %s", 
+                    STATE_STRINGS[previous_state], STATE_STRINGS[state]);
+            radio_->Stop();
+        }
+		if (sd_music_) {
+			ESP_LOGI(TAG, "Stopping SD music due to state change: %s -> %s",
+					 STATE_STRINGS[previous_state], STATE_STRINGS[state]);
+			sd_music_->stop();
+		}
+
+        display->ClearQRCode();
+    }																	   
     switch (state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
@@ -887,6 +978,89 @@ void Application::SetAecMode(AecMode mode) {
             protocol_->CloseAudioChannel();
         }
     });
+}
+
+
+// New: Receive external audio data (such as music playback)
+void Application::AddAudioData(AudioStreamPacket&& packet) {
+    auto codec = Board::GetInstance().GetAudioCodec();
+    if (device_state_ == kDeviceStateIdle && codec->output_enabled()) {
+        // packet.payload contains raw PCM data (int16_t)
+        if (packet.payload.size() >= 2) {
+            size_t num_samples = packet.payload.size() / sizeof(int16_t);
+            std::vector<int16_t> pcm_data(num_samples);
+            memcpy(pcm_data.data(), packet.payload.data(), packet.payload.size());
+            
+            // Check if sample rate matches, if not, perform simple resampling
+            if (packet.sample_rate != codec->output_sample_rate()) {
+                // ESP_LOGI(TAG, "Resampling music audio from %d to %d Hz", 
+                //         packet.sample_rate, codec->output_sample_rate());
+                
+                // Validate sample rate parameters
+                if (packet.sample_rate <= 0 || codec->output_sample_rate() <= 0) {
+                    ESP_LOGE(TAG, "Invalid sample rates: %d -> %d", 
+                            packet.sample_rate, codec->output_sample_rate());
+                    return;
+                }
+                
+                std::vector<int16_t> resampled;
+                
+                if (packet.sample_rate > codec->output_sample_rate()) {
+                    ESP_LOGI(TAG, "Music playback: Switching sample rate from %d Hz to %d Hz", 
+                        codec->output_sample_rate(), packet.sample_rate);
+
+                    // Try to dynamically switch sample rate
+                    if (codec->SetOutputSampleRate(packet.sample_rate)) {
+                        ESP_LOGI(TAG, "Successfully switched to music playback sample rate: %d Hz", packet.sample_rate);
+                    } else {
+                        ESP_LOGW(TAG, "Cannot switch sample rate, continue using current sample rate: %d Hz", codec->output_sample_rate());
+                    }
+                } else {
+                    // Upsampling: linear interpolation
+                    float upsample_ratio = codec->output_sample_rate() / static_cast<float>(packet.sample_rate);
+                    size_t expected_size = static_cast<size_t>(pcm_data.size() * upsample_ratio + 0.5f);
+                    resampled.reserve(expected_size);
+                    
+                    for (size_t i = 0; i < pcm_data.size(); ++i) {
+                        // Add original sample
+                        resampled.push_back(pcm_data[i]);
+                        
+                        // Calculate number of samples to interpolate
+                        int interpolation_count = static_cast<int>(upsample_ratio) - 1;
+                        if (interpolation_count > 0 && i + 1 < pcm_data.size()) {
+                            int16_t current = pcm_data[i];
+                            int16_t next = pcm_data[i + 1];
+                            for (int j = 1; j <= interpolation_count; ++j) {
+                                float t = static_cast<float>(j) / (interpolation_count + 1);
+                                int16_t interpolated = static_cast<int16_t>(current + (next - current) * t);
+                                resampled.push_back(interpolated);
+                            }
+                        } else if (interpolation_count > 0) {
+                            // For the last sample, simply repeat it
+                            for (int j = 1; j <= interpolation_count; ++j) {
+                                resampled.push_back(pcm_data[i]);
+                            }
+                        }
+                    }
+                    
+                    ESP_LOGI(TAG, "Upsampled %d -> %d samples (ratio: %.2f)", 
+                            pcm_data.size(), resampled.size(), upsample_ratio);
+                }
+                
+                pcm_data = std::move(resampled);
+            }
+            
+            // Ensure audio output is enabled
+            if (!codec->output_enabled()) {
+                codec->EnableOutput(true);
+            }
+            
+            // Send PCM data to audio codec
+            codec->OutputData(pcm_data);
+            
+            audio_service_.UpdateOutputTimestamp();
+        }
+    }
 }
 
 void Application::PlaySound(const std::string_view& sound) {

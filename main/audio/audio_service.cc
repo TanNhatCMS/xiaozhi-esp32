@@ -85,28 +85,28 @@ void AudioService::Start() {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioInputTask();
         vTaskDelete(NULL);
-    }, "audio_input", 2048 * 3, this, 8, &audio_input_task_handle_, 0);
+    }, "audio_input", 1024 * 2, this, 8, &audio_input_task_handle_, 0);
 
     /* Start the audio output task */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioOutputTask();
         vTaskDelete(NULL);
-    }, "audio_output", 2048 * 2, this, 4, &audio_output_task_handle_);
+    }, "audio_output", 1024 * 2, this, 4, &audio_output_task_handle_);
 #else
     /* Start the audio input task */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioInputTask();
         vTaskDelete(NULL);
-    }, "audio_input", 2048 * 2, this, 8, &audio_input_task_handle_);
+    }, "audio_input", 1024 * 2, this, 8, &audio_input_task_handle_);
 
     /* Start the audio output task */
     xTaskCreate([](void* arg) {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->AudioOutputTask();
         vTaskDelete(NULL);
-    }, "audio_output", 2048, this, 4, &audio_output_task_handle_);
+    }, "audio_output", 1024 * 2, this, 4, &audio_output_task_handle_);
 #endif
 
     /* Start the opus codec task */
@@ -114,7 +114,7 @@ void AudioService::Start() {
         AudioService* audio_service = (AudioService*)arg;
         audio_service->OpusCodecTask();
         vTaskDelete(NULL);
-    }, "opus_codec", 2048 * 13, this, 2, &opus_codec_task_handle_);
+    }, "opus_codec", 1024 * 25, this, 2, &opus_codec_task_handle_);
 }
 
 void AudioService::Stop() {
@@ -381,7 +381,7 @@ void AudioService::SetDecodeSampleRate(int sample_rate, int frame_duration) {
 
     auto codec = Board::GetInstance().GetAudioCodec();
     if (opus_decoder_->sample_rate() != codec->output_sample_rate()) {
-        ESP_LOGI(TAG, "Resampling audio from %d to %d", opus_decoder_->sample_rate(), codec->output_sample_rate());
+        ESP_LOGI(TAG, "Resampling audio from %d to %d, frame_duration %d", opus_decoder_->sample_rate(), codec->output_sample_rate(), frame_duration);
         output_resampler_.Configure(opus_decoder_->sample_rate(), codec->output_sample_rate());
     }
 }
@@ -675,6 +675,10 @@ void AudioService::SetModelsList(srmodel_list_t* models_list) {
             }
         });
     }
+}
+
+void AudioService::UpdateOutputTimestamp() {
+    last_output_time_ = std::chrono::steady_clock::now();
 }
 
 bool AudioService::IsAfeWakeWord() {

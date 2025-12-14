@@ -38,7 +38,7 @@ void WifiBoard::EnterWifiConfigMode() {
 
     auto& wifi_ap = WifiConfigurationAp::GetInstance();
     wifi_ap.SetLanguage(Lang::CODE);
-    wifi_ap.SetSsidPrefix("Xiaozhi");
+    wifi_ap.SetSsidPrefix("TienHuyIoT");
     wifi_ap.Start();
 
     // 等待 1.5 秒显示开发板信息
@@ -104,6 +104,10 @@ void WifiBoard::StartNetwork() {
         std::string notification = Lang::Strings::CONNECTED_TO;
         notification += ssid;
         display->ShowNotification(notification.c_str(), 30000);
+        
+        // Debug log: Print IP address when WiFi connected
+        std::string ip_address = WifiStation::GetInstance().GetIpAddress();
+        ESP_LOGI(TAG, "WiFi connected successfully - SSID: %s, IP Address: %s", ssid.c_str(), ip_address.c_str());
     });
     wifi_station.Start();
 
